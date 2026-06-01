@@ -1,0 +1,1696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EPUB Editor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: monospace; background: #f4f0e8; color: #222; min-height: 100vh; }
+  #app { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.1rem; margin-bottom: 16px; letter-spacing: 2px; text-transform: uppercase; }
+
+  #upload-zone {
+    border: 2px dashed #aaa; padding: 40px; text-align: center;
+    cursor: pointer; background: #fff; margin-bottom: 20px;
+  }
+  #upload-zone:hover { border-color: #333; }
+  #upload-zone input { display: none; }
+
+  #main { display: none; gap: 16px; }
+  #main.visible { display: grid; grid-template-columns: 240px 1fr 300px; }
+
+  /* ── Sidebar ── */
+  #sidebar { background: #fff; border: 1px solid #ccc; padding: 10px; overflow-y: auto; max-height: 100vh; position: sticky; top: 0; }
+  #sidebar h2 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; color: #666; }
+  #chapter-list { list-style: none; max-height: 260px; overflow-y: auto; border: 1px solid #eee; margin-bottom: 10px; }
+  #chapter-list li { padding: 6px 8px; cursor: pointer; font-size: 0.78rem; border-bottom: 1px solid #f0f0f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #chapter-list li:hover { background: #f4f0e8; }
+  #chapter-list li.active { background: #222; color: #fff; }
+
+  .sidebar-actions { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .sidebar-actions button { padding: 6px; font-size: 0.75rem; font-family: monospace; cursor: pointer; border: 1px solid #333; background: #fff; }
+  .sidebar-actions button:hover { background: #333; color: #fff; }
+  #btn-download { background: #222; color: #fff; border-color: #222; }
+  #btn-download:hover { background: #444; }
+
+  #rules-panel h2 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; color: #666; }
+  .rules-actions { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+  .rules-actions button { font-family: monospace; font-size: 0.68rem; padding: 3px 6px; border: 1px solid #999; background: #fff; cursor: pointer; flex: 1; }
+  .rules-actions button:hover { background: #f0f0f0; }
+  #btn-clear-rules:hover { background: #fdd; border-color: #c00; color: #c00; }
+  .rule-item { display: flex; align-items: center; padding: 3px 6px; background: #fff3cd; border: 1px solid #e8d87a; margin-bottom: 3px; font-size: 0.72rem; }
+  .rule-item .rule-selector { flex: 1; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rule-item .rule-del { background: none; border: none; cursor: pointer; color: #c00; padding: 0 4px; font-size: 0.9rem; flex-shrink: 0; }
+
+  /* ── Preview ── */
+  #preview-panel { background: #fff; border: 1px solid #ccc; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  #preview-panel h2 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #666; }
+  #preview-title { font-size: 0.85rem; font-weight: bold; }
+  #preview-hint { font-size: 0.72rem; color: #888; }
+
+  #preview-frame {
+    border: 1px solid #eee; padding: 12px; height: 560px; overflow-y: auto;
+    background: #fafafa; font-size: 0.85rem; line-height: 1.6;
+  }
+  /* clicking in preview */
+  #preview-frame * { cursor: crosshair; }
+  #preview-frame .pv-hover { outline: 2px dashed #e8a000 !important; background: rgba(232,160,0,0.07) !important; }
+  #preview-frame .pv-selected { outline: 2px solid #e8a000 !important; background: rgba(232,160,0,0.15) !important; }
+  #preview-frame .pv-live { outline: 2px solid #f55 !important; background: rgba(255,80,80,0.12) !important; }
+  #preview-frame .pv-ruled { opacity: 0.2; text-decoration: line-through; pointer-events: none; }
+
+  /* floating action bar that appears when you click an element in preview */
+  /* floating action bar */
+  #action-bar {
+    display: none; position: fixed; z-index: 9999;
+    background: #222; color: #fff;
+    border: 1px solid #555;
+    padding: 8px 10px; gap: 6px; flex-direction: column;
+    font-size: 0.72rem; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    width: 340px;
+  }
+  #action-bar.visible { display: flex; }
+  #action-top { display: flex; justify-content: space-between; align-items: center; }
+  #action-orig-label { color: #aaa; font-size: 0.68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  #action-middle { display: flex; align-items: center; gap: 6px; }
+  #action-sel-label { color: #888; font-size: 0.68rem; flex-shrink: 0; }
+  #action-selector {
+    flex: 1; font-family: monospace; font-size: 0.75rem;
+    padding: 3px 6px; background: #333; color: #fff;
+    border: 1px solid #666; outline: none;
+  }
+  #action-selector:focus { border-color: #e8a000; }
+  #action-selector.invalid { border-color: #c00; background: #3a1010; }
+  #action-match-count {
+    font-size: 0.7rem; flex-shrink: 0; min-width: 54px; text-align: right;
+    font-weight: bold;
+  }
+  #action-match-count.safe   { color: #4c4; }
+  #action-match-count.warn   { color: #fa0; }
+  #action-match-count.danger { color: #f55; }
+  #action-match-count.error  { color: #f55; font-weight: normal; font-style: italic; }
+  #action-bottom { display: flex; gap: 6px; }
+  #action-bar button { font-family: monospace; font-size: 0.7rem; padding: 3px 8px; border: 1px solid #666; background: #333; color: #fff; cursor: pointer; flex: 1; }
+  #action-bar button:hover { background: #c00; border-color: #c00; }
+  #action-bar button.safe:hover { background: #06a; border-color: #06a; }
+  #action-bar .close-bar { background: none; border: none; color: #888; cursor: pointer; padding: 0; font-size: 1rem; flex: 0; }
+
+  /* ── Tree panel ── */
+  #tree-panel { background: #fff; border: 1px solid #ccc; padding: 10px; overflow-y: auto; max-height: 100vh; position: sticky; top: 0; }
+  #tree-panel h2 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #666; margin-bottom: 6px; }
+  #tree-search { width: 100%; padding: 4px 6px; font-family: monospace; font-size: 0.75rem; border: 1px solid #ccc; margin-bottom: 6px; }
+  #elements-tree { font-size: 0.73rem; }
+
+  .tree-node { user-select: none; }
+  .tree-row {
+    display: flex; align-items: center; padding: 2px 4px;
+    border-bottom: 1px solid #f5f5f5; cursor: pointer; gap: 3px;
+  }
+  .tree-row:hover { background: #f4f0e8; }
+  .tree-row.active { background: #fff3a0; }
+  .tree-row.ruled { background: #ffe0e0; }
+
+  .tree-toggle { width: 14px; flex-shrink: 0; color: #999; font-size: 0.7rem; text-align: center; }
+  .tree-tag { color: #0055aa; font-weight: bold; font-size: 0.7rem; flex-shrink: 0; }
+  .tree-id { color: #a50; font-size: 0.68rem; }
+  .tree-cls { color: #888; font-size: 0.67rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .tree-preview { color: #aaa; font-size: 0.67rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 2; font-style: italic; }
+  .tree-actions { display: flex; gap: 2px; flex-shrink: 0; }
+  .tree-actions button { font-size: 0.62rem; font-family: monospace; padding: 1px 4px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+  .tree-actions button:hover { background: #eee; }
+  .tree-actions button.danger { border-color: #c00; color: #c00; }
+  .tree-actions button.danger:hover { background: #c00; color: #fff; }
+
+  .tree-children { display: none; border-left: 1px solid #e0e0e0; margin-left: 8px; }
+  .tree-children.open { display: block; }
+
+  #status { font-size: 0.72rem; color: #666; padding: 4px 0; min-height: 16px; }
+
+  /* ── Metadata panel ── */
+  #meta-panel { margin-bottom: 12px; border: 1px solid #ddd; background: #fafafa; padding: 8px; }
+  #meta-panel h2 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #666; margin-bottom: 8px; }
+  #cover-preview {
+    width: 100%; aspect-ratio: 2/3; object-fit: cover;
+    border: 1px solid #ccc; display: block; background: #eee;
+    cursor: pointer; margin-bottom: 6px;
+  }
+  #cover-preview.empty { display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 0.72rem; }
+  #cover-drop-hint { font-size: 0.68rem; color: #aaa; text-align: center; margin-bottom: 8px; }
+  #cover-file-input { display: none; }
+  #meta-title-label { font-size: 0.68rem; color: #666; display: block; margin-bottom: 3px; }
+  #meta-title {
+    width: 100%; font-family: monospace; font-size: 0.78rem;
+    padding: 4px 6px; border: 1px solid #ccc; background: #fff;
+  }
+  #meta-title:focus { border-color: #333; outline: none; }
+  #meta-title.changed { border-color: #e8a000; background: #fffbe6; }
+  #cover-changed-badge {
+    display: none; font-size: 0.65rem; background: #e8a000;
+    color: #fff; padding: 1px 5px; margin-left: 4px;
+  }
+
+  /* ── Rule type badges ── */
+  .rule-item { display: flex; align-items: center; padding: 3px 6px; margin-bottom: 3px; font-size: 0.72rem; border: 1px solid; }
+  .rule-item.type-remove   { background: #fff3cd; border-color: #e8d87a; }
+  .rule-item.type-keeponly { background: #d4edda; border-color: #82c896; }
+  .rule-type-badge { font-size: 0.6rem; padding: 1px 4px; margin-right: 5px; flex-shrink: 0; font-weight: bold; border-radius: 2px; }
+  .type-remove   .rule-type-badge { background: #e8d87a; color: #7a6000; }
+  .type-keeponly .rule-type-badge { background: #82c896; color: #1a5c2a; }
+  .rule-item .rule-selector { flex: 1; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rule-item .rule-del { background: none; border: none; cursor: pointer; color: #c00; padding: 0 4px; font-size: 0.9rem; flex-shrink: 0; }
+
+  /* keep-only button in action bar */
+  #action-keeponly { }
+
+  /* ── Rename modal ── */
+  #rename-modal {
+    display: none; position: fixed; inset: 0; z-index: 10000;
+    background: rgba(0,0,0,0.5); align-items: center; justify-content: center;
+  }
+  #rename-modal.visible { display: flex; }
+  #rename-box {
+    background: #fff; border: 1px solid #333; padding: 20px;
+    width: 500px; max-width: 95vw; font-family: monospace;
+  }
+  #rename-box h3 { font-size: 0.85rem; margin-bottom: 12px; }
+  #rename-controls { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  #rename-controls input { font-family: monospace; font-size: 0.75rem; padding: 4px 6px; border: 1px solid #ccc; }
+  #rename-find { flex: 1; min-width: 100px; }
+  #rename-replace { flex: 1; min-width: 100px; }
+  #rename-controls button { font-family: monospace; font-size: 0.72rem; padding: 4px 10px; border: 1px solid #333; background: #fff; cursor: pointer; }
+  #rename-controls button:hover { background: #333; color: #fff; }
+  #rename-list { max-height: 320px; overflow-y: auto; border: 1px solid #eee; }
+  .rename-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-bottom: 1px solid #f0f0f0; }
+  .rename-row input[type=text] { flex: 1; font-family: monospace; font-size: 0.75rem; padding: 2px 5px; border: 1px solid #ccc; }
+  .rename-row input[type=text].changed { border-color: #e8a000; background: #fffbe6; }
+  .rename-row .ch-num { color: #aaa; font-size: 0.68rem; min-width: 22px; }
+  #rename-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  #rename-footer button { font-family: monospace; font-size: 0.75rem; padding: 5px 14px; border: 1px solid #333; background: #fff; cursor: pointer; }
+  #rename-footer button.primary { background: #222; color: #fff; }
+  #rename-footer button:hover:not(.primary) { background: #eee; }
+
+  /* ── Filename preview ── */
+  #filename-preview { font-size: 0.68rem; color: #888; margin-top: 4px; padding: 3px 6px; background: #f5f5f5; border: 1px solid #e0e0e0; word-break: break-all; }
+  #filename-preview span { color: #333; font-weight: bold; }
+
+  /* ── Undo toast ── */
+  #undo-toast {
+    display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff; padding: 8px 16px; font-size: 0.78rem;
+    z-index: 9998; gap: 12px; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  #undo-toast.visible { display: flex; }
+  #undo-toast button { font-family: monospace; font-size: 0.72rem; padding: 2px 10px; border: 1px solid #aaa; background: #555; color: #fff; cursor: pointer; }
+  #undo-toast button:hover { background: #e8a000; border-color: #e8a000; }
+
+  /* ── Chapter exclude ── */
+  #chapter-list li { display: flex; align-items: center; gap: 4px; }
+  #chapter-list li .ch-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #chapter-list li.excluded .ch-label { text-decoration: line-through; color: #aaa; }
+  #chapter-list li .ch-excl-btn {
+    flex-shrink: 0; background: none; border: 1px solid #ddd;
+    font-size: 0.6rem; padding: 0px 3px; cursor: pointer; color: #aaa; font-family: monospace;
+  }
+  #chapter-list li.active .ch-excl-btn { border-color: #666; color: #ccc; }
+  #chapter-list li.excluded .ch-excl-btn { border-color: #c00; color: #c00; background: #fff0f0; }
+  #chapter-list li .ch-excl-btn:hover { background: #fdd; border-color: #c00; color: #c00; }
+  #excl-count { font-size: 0.68rem; color: #c00; margin-left: 4px; }
+
+  /* ── Before/After toggle ── */
+  #preview-toolbar { display: flex; align-items: center; gap: 8px; }
+  #preview-toolbar h2 { flex: 1; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: #666; }
+  .toggle-btn-group { display: flex; border: 1px solid #ccc; }
+  .toggle-btn-group button {
+    font-family: monospace; font-size: 0.68rem; padding: 3px 10px;
+    border: none; background: #fff; cursor: pointer; color: #666;
+  }
+  .toggle-btn-group button.active { background: #222; color: #fff; }
+  .toggle-btn-group button:hover:not(.active) { background: #f0f0f0; }
+  #before-after-diff { font-size: 0.68rem; color: #888; text-align: right; }
+
+  /* ── Find & Replace modal ── */
+  #fnr-modal {
+    display: none; position: fixed; inset: 0; z-index: 10000;
+    background: rgba(0,0,0,0.5); align-items: flex-start; justify-content: center; padding-top: 60px;
+  }
+  #fnr-modal.visible { display: flex; }
+  #fnr-box {
+    background: #fff; border: 1px solid #333; padding: 20px;
+    width: 620px; max-width: 95vw; font-family: monospace; max-height: 80vh; display: flex; flex-direction: column;
+  }
+  #fnr-box h3 { font-size: 0.85rem; margin-bottom: 14px; }
+  #fnr-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  #fnr-inputs label { font-size: 0.68rem; color: #666; display: block; margin-bottom: 3px; }
+  #fnr-inputs input, #fnr-inputs select {
+    width: 100%; font-family: monospace; font-size: 0.78rem;
+    padding: 5px 7px; border: 1px solid #ccc;
+  }
+  #fnr-options { display: flex; gap: 16px; margin-bottom: 12px; font-size: 0.72rem; align-items: center; flex-wrap: wrap; }
+  #fnr-options label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  #fnr-scope-info { font-size: 0.68rem; color: #888; margin-bottom: 10px; }
+  #fnr-preview-list { flex: 1; overflow-y: auto; border: 1px solid #eee; max-height: 280px; }
+  .fnr-match-row { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; font-size: 0.73rem; }
+  .fnr-match-row .fnr-ch { color: #888; font-size: 0.67rem; margin-bottom: 2px; }
+  .fnr-match-row .fnr-before { color: #c00; }
+  .fnr-match-row .fnr-after  { color: #070; }
+  .fnr-mark { background: #fff3a0; font-weight: bold; }
+  #fnr-summary { font-size: 0.72rem; color: #666; padding: 6px 0; }
+  #fnr-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 8px; }
+  #fnr-footer button { font-family: monospace; font-size: 0.75rem; padding: 5px 14px; border: 1px solid #333; background: #fff; cursor: pointer; }
+  #fnr-footer button.primary { background: #222; color: #fff; }
+  #fnr-footer button:hover:not(.primary) { background: #eee; }
+
+  /* ── CSS Editor (right panel tabs) ── */
+  #right-panel { background: #fff; border: 1px solid #ccc; display: flex; flex-direction: column; overflow: hidden; max-height: 100vh; position: sticky; top: 0; }
+  #right-tabs { display: flex; border-bottom: 1px solid #ccc; flex-shrink: 0; }
+  .right-tab { flex: 1; font-family: monospace; font-size: 0.7rem; padding: 6px; border: none; background: #f5f5f5; cursor: pointer; border-right: 1px solid #ccc; text-transform: uppercase; letter-spacing: 1px; color: #666; }
+  .right-tab:last-child { border-right: none; }
+  .right-tab.active { background: #fff; color: #222; font-weight: bold; border-bottom: 2px solid #222; margin-bottom: -1px; }
+  .right-tab:hover:not(.active) { background: #eee; }
+  #right-tree-pane, #right-css-pane { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 10px; }
+  #right-tree-pane { display: flex; }
+  #right-css-pane  { display: none; }
+  #right-tree-pane.active { display: flex; flex-direction: column; }
+  #right-css-pane.active  { display: flex; flex-direction: column; }
+
+  /* CSS preset buttons */
+  #css-presets { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+  #css-presets button { font-family: monospace; font-size: 0.65rem; padding: 2px 6px; border: 1px solid #bbb; background: #f9f9f9; cursor: pointer; }
+  #css-presets button:hover { background: #333; color: #fff; border-color: #333; }
+
+  /* quick controls */
+  #css-quick { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; font-size: 0.72rem; }
+  #css-quick label { color: #666; font-size: 0.67rem; display: block; margin-bottom: 2px; }
+  #css-quick input, #css-quick select {
+    width: 100%; font-family: monospace; font-size: 0.73rem;
+    padding: 3px 5px; border: 1px solid #ccc; background: #fff;
+  }
+
+  /* raw editor */
+  #css-raw-label { font-size: 0.67rem; color: #666; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+  #css-editor {
+    flex: 1; font-family: monospace; font-size: 0.75rem; padding: 8px;
+    border: 1px solid #ccc; resize: none; background: #1e1e1e; color: #d4d4d4;
+    line-height: 1.5; outline: none; min-height: 200px;
+  }
+  #css-editor:focus { border-color: #e8a000; }
+  #css-actions { display: flex; gap: 6px; margin-top: 8px; }
+  #css-actions button { font-family: monospace; font-size: 0.72rem; padding: 4px 10px; border: 1px solid #333; background: #fff; cursor: pointer; flex: 1; }
+  #css-actions button:hover { background: #333; color: #fff; }
+  #css-preview-btn { border-color: #06a; color: #06a; }
+  #css-preview-btn:hover { background: #06a !important; color: #fff !important; }
+  #css-status { font-size: 0.67rem; color: #888; margin-top: 4px; min-height: 14px; }</style>
+</head>
+<body>
+<div id="app">
+  <h1>EPUB Editor</h1>
+
+  <div id="upload-zone">
+    <p>Drop an <strong>.epub</strong> file here or click to browse</p>
+    <input type="file" id="file-input" accept=".epub">
+  </div>
+
+  <div id="main">
+
+    <!-- LEFT: chapters + rules -->
+    <div id="sidebar">
+
+      <!-- Metadata -->
+      <div id="meta-panel">
+        <h2>Metadata <span id="cover-changed-badge">cover changed</span></h2>
+        <img id="cover-preview" title="Click to change cover" alt="Cover">
+        <div id="cover-drop-hint">click cover to replace · drag an image here</div>
+        <input type="file" id="cover-file-input" accept="image/*">
+        <label id="meta-title-label" for="meta-title">Title</label>
+        <input type="text" id="meta-title" placeholder="Book title…">
+      </div>
+
+      <h2>Chapters (<span id="chapter-count">0</span>)<span id="excl-count"></span></h2>
+      <ul id="chapter-list"></ul>
+
+      <div class="sidebar-actions">
+        <button id="btn-rename-chapters">✏ Rename Chapters</button>
+        <button id="btn-find-replace">🔍 Find &amp; Replace</button>
+        <button id="btn-download">⬇ Download Cleaned EPUB</button>
+        <div id="filename-preview">Output: <span id="filename-span">—</span></div>
+      </div>
+
+      <div id="rules-panel">
+        <h2>Rules (<span id="rules-count">0</span>)</h2>
+        <div class="rules-actions">
+          <button id="btn-save-rules" title="Save rules as a .json file">💾 Save Rules</button>
+          <button id="btn-load-rules" title="Load rules from a .json file">📂 Load Rules</button>
+          <button id="btn-clear-rules" title="Remove all rules">🗑 Clear</button>
+          <input type="file" id="rules-file-input" accept=".json" style="display:none">
+        </div>
+        <div id="rules-list"><em style="color:#aaa;font-size:0.72rem">Click elements to add rules.</em></div>
+      </div>
+    </div>
+
+    <!-- MIDDLE: preview -->
+    <div id="preview-panel">
+      <div id="preview-toolbar">
+        <h2>Preview <span id="preview-title"></span></h2>
+        <div class="toggle-btn-group">
+          <button id="btn-view-cleaned" class="active">Cleaned</button>
+          <button id="btn-view-original">Original</button>
+        </div>
+      </div>
+      <div id="preview-hint">Click any element to select it → action bar appears.</div>
+      <div id="preview-frame"></div>
+      <div id="status"></div>
+    </div>
+
+    <!-- RIGHT: tabbed tree + CSS editor -->
+    <div id="right-panel">
+      <div id="right-tabs">
+        <button class="right-tab active" id="tab-tree">🌲 Tree</button>
+        <button class="right-tab" id="tab-css">🎨 CSS</button>
+      </div>
+
+      <!-- Tree pane -->
+      <div id="right-tree-pane" class="active">
+        <input type="text" id="tree-search" placeholder="filter by tag / class / id…" style="padding:4px 6px;font-family:monospace;font-size:0.75rem;border:1px solid #ccc;margin-bottom:6px;width:100%">
+        <div id="elements-tree" style="font-size:0.73rem;overflow-y:auto;flex:1"></div>
+      </div>
+
+      <!-- CSS editor pane -->
+      <div id="right-css-pane">
+        <div id="css-presets">
+          <button data-preset="readable">Readable</button>
+          <button data-preset="compact">Compact</button>
+          <button data-preset="justify">Justify</button>
+          <button data-preset="clean">Clean margins</button>
+          <button data-preset="clear">Clear all</button>
+        </div>
+        <div id="css-quick">
+          <div>
+            <label>Font size (body)</label>
+            <input type="text" id="qcss-fontsize" placeholder="e.g. 1rem, 16px">
+          </div>
+          <div>
+            <label>Line height</label>
+            <input type="text" id="qcss-lineheight" placeholder="e.g. 1.7">
+          </div>
+          <div>
+            <label>Font family</label>
+            <select id="qcss-fontfamily">
+              <option value="">— unchanged —</option>
+              <option value="Georgia, serif">Georgia (serif)</option>
+              <option value="'Times New Roman', serif">Times New Roman</option>
+              <option value="Palatino, serif">Palatino</option>
+              <option value="'Book Antiqua', serif">Book Antiqua</option>
+              <option value="Arial, sans-serif">Arial (sans)</option>
+              <option value="Verdana, sans-serif">Verdana</option>
+              <option value="'Courier New', monospace">Courier New (mono)</option>
+            </select>
+          </div>
+          <div>
+            <label>Paragraph spacing</label>
+            <input type="text" id="qcss-paraspacing" placeholder="e.g. 0.8em">
+          </div>
+          <div>
+            <label>Text align</label>
+            <select id="qcss-textalign">
+              <option value="">— unchanged —</option>
+              <option value="left">Left</option>
+              <option value="justify">Justify</option>
+              <option value="center">Center</option>
+            </select>
+          </div>
+          <div>
+            <label>Max width (content)</label>
+            <input type="text" id="qcss-maxwidth" placeholder="e.g. 700px, 100%">
+          </div>
+        </div>
+        <div id="css-raw-label">
+          <span>Raw CSS (appended to above)</span>
+          <button id="btn-css-sync-quick" style="font-family:monospace;font-size:0.65rem;padding:1px 6px;border:1px solid #ccc;background:#fff;cursor:pointer" title="Regenerate from quick controls">↺ Sync</button>
+        </div>
+        <textarea id="css-editor" spellcheck="false" placeholder="/* your custom CSS here */
+body { }
+p { }
+h1, h2 { }"></textarea>
+        <div id="css-actions">
+          <button id="css-preview-btn">⊙ Preview in chapter</button>
+          <button id="css-clear-preview-btn">✕ Clear preview</button>
+        </div>
+        <div id="css-status"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- floating action bar -->
+<div id="action-bar">
+  <div id="action-top">
+    <span id="action-orig-label"></span>
+    <button class="close-bar" id="action-close">✕</button>
+  </div>
+  <div id="action-middle">
+    <label id="action-sel-label">Selector</label>
+    <input type="text" id="action-selector" spellcheck="false">
+    <span id="action-match-count"></span>
+  </div>
+  <div id="action-bottom">
+    <button id="action-remove">✕ Remove</button>
+    <button id="action-keeponly" class="safe">◎ Keep only</button>
+    <button id="action-highlight" class="safe">⊙ Tree</button>
+  </div>
+</div>
+
+<!-- rename modal -->
+<div id="rename-modal">
+  <div id="rename-box">
+    <h3>✏ Rename Chapters</h3>
+    <div id="rename-controls">
+      <input type="text" id="rename-find" placeholder="Find…">
+      <input type="text" id="rename-replace" placeholder="Replace with…">
+      <button id="btn-rename-apply-all">Apply to all</button>
+      <button id="btn-rename-reset">Reset all</button>
+    </div>
+    <div id="rename-list"></div>
+    <div id="rename-footer">
+      <button id="btn-rename-cancel">Cancel</button>
+      <button id="btn-rename-save" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- find & replace modal -->
+<div id="fnr-modal">
+  <div id="fnr-box">
+    <h3>🔍 Find &amp; Replace in Content</h3>
+    <div id="fnr-inputs">
+      <div>
+        <label>Find</label>
+        <input type="text" id="fnr-find" placeholder="Text to find…">
+      </div>
+      <div>
+        <label>Replace with</label>
+        <input type="text" id="fnr-replace" placeholder="Replacement (blank to delete)…">
+      </div>
+    </div>
+    <div id="fnr-options">
+      <label><input type="checkbox" id="fnr-case"> Case sensitive</label>
+      <label><input type="checkbox" id="fnr-regex"> Regex</label>
+      <label>Scope:
+        <select id="fnr-scope">
+          <option value="all">All chapters</option>
+          <option value="current">Current chapter only</option>
+        </select>
+      </label>
+      <button id="btn-fnr-preview" style="margin-left:auto">Preview matches</button>
+    </div>
+    <div id="fnr-summary"></div>
+    <div id="fnr-preview-list"></div>
+    <div id="fnr-footer">
+      <button id="btn-fnr-cancel">Cancel</button>
+      <button id="btn-fnr-apply" class="primary" disabled>Apply to chapters</button>
+    </div>
+  </div>
+</div>
+
+<!-- undo toast -->
+<div id="undo-toast">
+  <span id="undo-msg">Rule added</span>
+  <button id="btn-undo">↩ Undo</button>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let zip = null;
+let chapters = [];
+let currentIdx = 0;
+let rules = [];
+let selectedEl = null;
+let undoStack = [];
+let chapterRenames = {};
+let excludedChapters = new Set();  // indices of excluded chapters
+let viewMode = 'cleaned';          // 'cleaned' | 'original'
+let fnrReplacements = [];          // pending find/replace ops: { chIdx, original, replaced }
+
+// metadata
+let opfPath = '';
+let opfBase = '';
+let epubTitle = '';
+let coverPath = '';
+let newCoverData = null;
+let newCoverObjectUrl = null;
+
+// ── Upload ─────────────────────────────────────────────────────────────────
+const uploadZone = document.getElementById('upload-zone');
+const fileInput  = document.getElementById('file-input');
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor='#333'; });
+uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor='#aaa'; });
+uploadZone.addEventListener('drop', e => { e.preventDefault(); loadFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => loadFile(fileInput.files[0]));
+
+async function loadFile(file) {
+  if (!file || !file.name.endsWith('.epub')) return alert('Please select a valid .epub file.');
+  setStatus('Loading…');
+  zip = await JSZip.loadAsync(file);
+  await parseEpub();
+  document.getElementById('upload-zone').style.display = 'none';
+  document.getElementById('main').classList.add('visible');
+}
+
+// ── Parse EPUB ─────────────────────────────────────────────────────────────
+async function parseEpub() {
+  const containerXml = await zip.file('META-INF/container.xml').async('string');
+  opfPath = containerXml.match(/full-path="([^"]+\.opf)"/)?.[1];
+  if (!opfPath) return alert('Could not find OPF file.');
+
+  const opfXml  = await zip.file(opfPath).async('string');
+  opfBase = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/')+1) : '';
+  const parser  = new DOMParser();
+  const opfDoc  = parser.parseFromString(opfXml, 'application/xml');
+
+  // ── Title ──
+  const titleEl = opfDoc.querySelector('metadata title') || opfDoc.querySelector('dc\\:title, title');
+  epubTitle = titleEl ? titleEl.textContent.trim() : '';
+  document.getElementById('meta-title').value = epubTitle;
+
+  // ── Cover ──
+  const manifest = {};
+  opfDoc.querySelectorAll('manifest item').forEach(item => {
+    manifest[item.getAttribute('id')] = {
+      href: item.getAttribute('href'),
+      type: item.getAttribute('media-type') || ''
+    };
+  });
+
+  // find cover: meta name="cover" → id → href, or item with properties="cover-image"
+  coverPath = '';
+  const coverMeta = opfDoc.querySelector('meta[name="cover"]');
+  if (coverMeta) {
+    const coverId = coverMeta.getAttribute('content');
+    if (manifest[coverId]) coverPath = opfBase + manifest[coverId].href;
+  }
+  if (!coverPath) {
+    opfDoc.querySelectorAll('manifest item').forEach(item => {
+      if ((item.getAttribute('properties') || '').includes('cover-image')) {
+        coverPath = opfBase + item.getAttribute('href');
+      }
+    });
+  }
+  // fallback: first image in manifest
+  if (!coverPath) {
+    for (const [id, m] of Object.entries(manifest)) {
+      if (m.type.startsWith('image/')) { coverPath = opfBase + m.href; break; }
+    }
+  }
+
+  await renderCoverPreview();
+
+  // ── Spine ──
+  chapters = [];
+  for (const ref of opfDoc.querySelectorAll('spine itemref')) {
+    const idref = ref.getAttribute('idref');
+    const href  = manifest[idref]?.href;
+    if (!href) continue;
+    const fullPath = opfBase + href;
+    const f = zip.file(fullPath) || zip.file(decodeURIComponent(fullPath));
+    if (!f) continue;
+    const html = await f.async('string');
+    chapters.push({ id: idref, title: extractTitle(html, href), path: fullPath, originalHtml: html });
+  }
+
+  document.getElementById('chapter-count').textContent = chapters.length;
+  chapterRenames = {};
+  excludedChapters = new Set();
+  renderChapterList();
+  loadChapter(0);
+  updateFilenamePreview();
+  setStatus(`Loaded ${chapters.length} chapters.`);
+}
+
+function extractTitle(html, fallback) {
+  const m = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+         || html.match(/<h[1-3][^>]*>([^<]+)<\/h[1-3]>/i);
+  return m ? m[1].trim() : fallback;
+}
+
+// ── Chapter List ───────────────────────────────────────────────────────────
+function renderChapterList() {
+  const ul = document.getElementById('chapter-list');
+  ul.innerHTML = '';
+  chapters.forEach((ch, i) => {
+    const displayTitle = chapterRenames[i] !== undefined ? chapterRenames[i] : ch.title;
+    const isExcluded   = excludedChapters.has(i);
+    const li = document.createElement('li');
+    if (i === currentIdx) li.classList.add('active');
+    if (isExcluded)       li.classList.add('excluded');
+
+    const label = document.createElement('span');
+    label.className = 'ch-label';
+    label.textContent = `${i+1}. ${displayTitle}`;
+    label.title = displayTitle;
+    if (chapterRenames[i]) label.style.fontStyle = 'italic';
+    label.addEventListener('click', () => loadChapter(i));
+
+    const exclBtn = document.createElement('button');
+    exclBtn.className = 'ch-excl-btn';
+    exclBtn.textContent = isExcluded ? '✕' : '–';
+    exclBtn.title = isExcluded ? 'Click to include' : 'Click to exclude';
+    exclBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (excludedChapters.has(i)) excludedChapters.delete(i);
+      else excludedChapters.add(i);
+      renderChapterList();
+      updateExclCount();
+    });
+
+    li.appendChild(label);
+    li.appendChild(exclBtn);
+    ul.appendChild(li);
+  });
+}
+
+function updateExclCount() {
+  const n = excludedChapters.size;
+  const el = document.getElementById('excl-count');
+  el.textContent = n ? ` (${n} excluded)` : '';
+}
+
+function loadChapter(idx) {
+  currentIdx = idx;
+  hideActionBar();
+  renderChapterList();
+  renderPreview();
+  renderTree();
+  document.getElementById('preview-title').textContent = '— ' + (chapterRenames[idx] || chapters[idx].title);
+  setStatus('');
+}
+
+// ── Before/After Toggle ────────────────────────────────────────────────────
+document.getElementById('btn-view-cleaned').addEventListener('click', () => {
+  viewMode = 'cleaned';
+  document.getElementById('btn-view-cleaned').classList.add('active');
+  document.getElementById('btn-view-original').classList.remove('active');
+  document.getElementById('preview-hint').style.display = '';
+  renderPreview();
+});
+document.getElementById('btn-view-original').addEventListener('click', () => {
+  viewMode = 'original';
+  document.getElementById('btn-view-original').classList.add('active');
+  document.getElementById('btn-view-cleaned').classList.remove('active');
+  document.getElementById('preview-hint').style.display = 'none';
+  renderPreview();
+});
+
+// ── Preview ────────────────────────────────────────────────────────────────
+function renderPreview() {
+  const ch   = chapters[currentIdx];
+  const src  = viewMode === 'original' ? ch.originalHtml : getWorkingHtml(currentIdx);
+  const parser = new DOMParser();
+  const doc    = parser.parseFromString(src, 'text/html');
+  doc.body.querySelectorAll('script,style,link').forEach(el => el.remove());
+
+  if (viewMode === 'cleaned') {
+    rules.forEach(r => {
+      try { doc.body.querySelectorAll(r.selector).forEach(el => el.classList.add('pv-ruled')); } catch(e){}
+    });
+  }
+
+  const frame = document.getElementById('preview-frame');
+  frame.innerHTML = doc.body.innerHTML;
+
+  if (viewMode === 'original') return; // no interaction in original mode
+
+  frame.querySelectorAll('*').forEach(el => {
+    el.addEventListener('mouseover', e => {
+      e.stopPropagation();
+      frame.querySelectorAll('.pv-hover').forEach(x => x.classList.remove('pv-hover'));
+      el.classList.add('pv-hover');
+    });
+    el.addEventListener('mouseout', () => el.classList.remove('pv-hover'));
+    el.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      selectPreviewEl(el, e.clientX, e.clientY);
+    });
+  });
+}
+
+function getWorkingHtml(idx) {
+  return applyRulesToHtml(chapters[idx].originalHtml);
+}
+
+function selectPreviewEl(el, x, y) {
+  const frame = document.getElementById('preview-frame');
+  frame.querySelectorAll('.pv-selected').forEach(x => x.classList.remove('pv-selected'));
+  el.classList.add('pv-selected');
+  selectedEl = el;
+
+  const sel = buildSelector(el);
+  showActionBar(sel, x, y);
+}
+
+// ── Action Bar ─────────────────────────────────────────────────────────────
+function showActionBar(selector, x, y) {
+  const bar   = document.getElementById('action-bar');
+  const input = document.getElementById('action-selector');
+
+  document.getElementById('action-orig-label').textContent = 'auto: ' + buildLabel(selectedEl);
+  input.value = selector;
+  input.classList.remove('invalid');
+
+  bar.classList.add('visible');
+
+  // position near cursor, keep on screen
+  const bw = 340, bh = 110;
+  let left = x + 14, top = y + 14;
+  if (left + bw > window.innerWidth)  left = x - bw - 14;
+  if (top  + bh > window.innerHeight) top  = y - bh - 14;
+  bar.style.left = left + 'px';
+  bar.style.top  = top  + 'px';
+
+  updateMatchCount(selector);
+}
+
+// live update as user edits selector
+document.getElementById('action-selector').addEventListener('input', e => {
+  const sel = e.target.value.trim();
+  updateMatchCount(sel);
+});
+
+function updateMatchCount(selector) {
+  const input   = document.getElementById('action-selector');
+  const counter = document.getElementById('action-match-count');
+  const frame   = document.getElementById('preview-frame');
+
+  // clear old live highlights
+  frame.querySelectorAll('.pv-live').forEach(el => el.classList.remove('pv-live'));
+
+  if (!selector) {
+    counter.textContent = '';
+    counter.className   = '';
+    input.classList.remove('invalid');
+    return;
+  }
+
+  let matches;
+  try {
+    matches = frame.querySelectorAll(selector);
+    input.classList.remove('invalid');
+  } catch(e) {
+    input.classList.add('invalid');
+    counter.textContent = 'invalid';
+    counter.className   = 'error';
+    return;
+  }
+
+  const n = matches.length;
+  matches.forEach(el => el.classList.add('pv-live'));
+
+  if (n === 0) {
+    counter.textContent = '0 matches';
+    counter.className   = 'error';
+  } else if (n === 1) {
+    counter.textContent = '1 match ✓';
+    counter.className   = 'safe';
+  } else if (n <= 3) {
+    counter.textContent = `${n} matches ⚠`;
+    counter.className   = 'warn';
+  } else {
+    counter.textContent = `${n} matches !!`;
+    counter.className   = 'danger';
+  }
+}
+
+document.getElementById('action-remove').addEventListener('click', () => {
+  const sel = document.getElementById('action-selector').value.trim();
+  if (!sel) return;
+  try { document.getElementById('preview-frame').querySelectorAll(sel); }
+  catch(e) { setStatus('Invalid selector — fix it before adding.'); return; }
+  const n = document.getElementById('preview-frame').querySelectorAll(sel).length;
+  if (n === 0) { setStatus('Selector matches nothing — rule not added.'); return; }
+  addRule(sel, buildLabel(selectedEl), 'remove');
+  hideActionBar();
+});
+
+document.getElementById('action-keeponly').addEventListener('click', () => {
+  const sel = document.getElementById('action-selector').value.trim();
+  if (!sel) return;
+  try { document.getElementById('preview-frame').querySelectorAll(sel); }
+  catch(e) { setStatus('Invalid selector.'); return; }
+  const n = document.getElementById('preview-frame').querySelectorAll(sel).length;
+  if (n === 0) { setStatus('Selector matches nothing — rule not added.'); return; }
+  addRule(sel, buildLabel(selectedEl), 'keeponly');
+  hideActionBar();
+});
+
+document.getElementById('action-highlight').addEventListener('click', () => {
+  const sel = document.getElementById('action-selector').value.trim();
+  highlightInTree(sel);
+  hideActionBar();
+});
+
+function hideActionBar() {
+  document.getElementById('action-bar').classList.remove('visible');
+  const frame = document.getElementById('preview-frame');
+  if (frame) {
+    frame.querySelectorAll('.pv-selected,.pv-live').forEach(el => {
+      el.classList.remove('pv-selected');
+      el.classList.remove('pv-live');
+    });
+  }
+  selectedEl = null;
+}
+
+document.getElementById('action-close').addEventListener('click', hideActionBar);
+
+// ── Build Selector ─────────────────────────────────────────────────────────
+// Produces a specific, useful CSS selector for the element
+function buildSelector(el) {
+  if (el.id) return `#${CSS.escape(el.id)}`;
+
+  const tag = el.tagName.toLowerCase();
+
+  // named semantic elements — use tag alone if unique enough
+  if (['nav','header','footer','main','aside','article','h1','h2','h3'].includes(tag)) {
+    return tag;
+  }
+
+  // class-based
+  if (el.classList.length) {
+    // pick first meaningful class (skip utility/layout class noise)
+    const meaningful = [...el.classList].filter(c => c.length > 2 && !c.startsWith('sm:') && !c.startsWith('&') && !c.startsWith('<'));
+    if (meaningful.length) {
+      const clsSel = tag + '.' + meaningful.slice(0, 2).map(c => CSS.escape(c)).join('.');
+      return clsSel;
+    }
+  }
+
+  return tag;
+}
+
+function buildLabel(el) {
+  const tag = el.tagName.toLowerCase();
+  const id  = el.id ? `#${el.id}` : '';
+  const cls = el.classList.length ? `.${[...el.classList][0]}` : '';
+  return `<${tag}${id}${cls}>`;
+}
+
+// ── Element Tree ───────────────────────────────────────────────────────────
+function renderTree(filter) {
+  const ch     = chapters[currentIdx];
+  const parser = new DOMParser();
+  const doc    = parser.parseFromString(ch.originalHtml, 'text/html');
+  doc.body.querySelectorAll('script,style').forEach(el => el.remove());
+
+  const container = document.getElementById('elements-tree');
+  container.innerHTML = '';
+
+  function makeNode(el, depth) {
+    if (el.nodeType !== 1) return null;
+
+    const tag = el.tagName.toLowerCase();
+    const sel = buildSelector(el);
+    const isRuled = rules.some(r => r.selector === sel);
+    const idStr  = el.id ? `#${el.id}` : '';
+    const clsStr = [...el.classList].filter(c => !c.startsWith('sm:') && !c.startsWith('&') && !c.startsWith('<')).slice(0, 3).join(' .');
+    const labelStr = (idStr || (clsStr ? '.'+clsStr : '')).slice(0, 30);
+    const textPreview = el.childNodes.length
+      ? [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join(' ').slice(0, 40)
+      : '';
+
+    // filter
+    if (filter) {
+      const hay = (tag + idStr + clsStr).toLowerCase();
+      if (!hay.includes(filter.toLowerCase())) return null;
+    }
+
+    const hasChildren = el.children.length > 0;
+
+    const node = document.createElement('div');
+    node.className = 'tree-node';
+    node.dataset.sel = sel;
+
+    const row = document.createElement('div');
+    row.className = 'tree-row' + (isRuled ? ' ruled' : '');
+    row.dataset.sel = sel;
+
+    const toggle = document.createElement('span');
+    toggle.className = 'tree-toggle';
+    toggle.textContent = hasChildren ? '▶' : ' ';
+
+    const tagSpan = document.createElement('span');
+    tagSpan.className = 'tree-tag';
+    tagSpan.textContent = tag;
+
+    const idSpan = document.createElement('span');
+    idSpan.className = 'tree-id';
+    idSpan.textContent = idStr;
+
+    const clsSpan = document.createElement('span');
+    clsSpan.className = 'tree-cls';
+    clsSpan.textContent = clsStr ? '.'+clsStr : '';
+    clsSpan.title = sel;
+
+    const previewSpan = document.createElement('span');
+    previewSpan.className = 'tree-preview';
+    previewSpan.textContent = textPreview;
+
+    const actions = document.createElement('div');
+    actions.className = 'tree-actions';
+
+    const btnHL = document.createElement('button');
+    btnHL.textContent = '⊙';
+    btnHL.title = 'Highlight in preview';
+    btnHL.addEventListener('click', e => { e.stopPropagation(); highlightInPreview(sel); });
+
+    const btnRM = document.createElement('button');
+    btnRM.textContent = '✕';
+    btnRM.className = 'danger';
+    btnRM.title = 'Add remove rule';
+    btnRM.addEventListener('click', e => { e.stopPropagation(); addRule(sel, buildLabel(el)); });
+
+    actions.appendChild(btnHL);
+    actions.appendChild(btnRM);
+
+    row.appendChild(toggle);
+    row.appendChild(tagSpan);
+    row.appendChild(idSpan);
+    row.appendChild(clsSpan);
+    row.appendChild(previewSpan);
+    row.appendChild(actions);
+
+    // expand/collapse
+    const children = document.createElement('div');
+    children.className = 'tree-children';
+
+    row.addEventListener('click', () => {
+      if (hasChildren) {
+        const open = children.classList.toggle('open');
+        toggle.textContent = open ? '▼' : '▶';
+      }
+      highlightInPreview(sel);
+      // mark active
+      container.querySelectorAll('.tree-row.active').forEach(r => r.classList.remove('active'));
+      row.classList.add('active');
+    });
+
+    node.appendChild(row);
+
+    if (hasChildren) {
+      [...el.children].forEach(child => {
+        const childNode = makeNode(child, depth + 1);
+        if (childNode) children.appendChild(childNode);
+      });
+      node.appendChild(children);
+    }
+
+    return node;
+  }
+
+  [...doc.body.children].forEach(child => {
+    const node = makeNode(child, 0);
+    if (node) container.appendChild(node);
+  });
+}
+
+document.getElementById('tree-search').addEventListener('input', e => {
+  renderTree(e.target.value.trim());
+});
+
+// ── Highlight in preview from tree ────────────────────────────────────────
+function highlightInPreview(selector) {
+  const frame = document.getElementById('preview-frame');
+  frame.querySelectorAll('.pv-selected').forEach(el => el.classList.remove('pv-selected'));
+  try {
+    const matches = frame.querySelectorAll(selector);
+    matches.forEach(el => el.classList.add('pv-selected'));
+    if (matches.length) matches[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch(e) {}
+  setStatus(`Highlighting: ${selector}`);
+}
+
+// ── Highlight in tree from preview ────────────────────────────────────────
+function highlightInTree(selector) {
+  const container = document.getElementById('elements-tree');
+  container.querySelectorAll('.tree-row.active').forEach(r => r.classList.remove('active'));
+  const target = container.querySelector(`.tree-row[data-sel="${CSS.escape(selector)}"]`);
+  if (target) {
+    // open all parents
+    let p = target.parentElement;
+    while (p && p.id !== 'elements-tree') {
+      if (p.classList.contains('tree-children')) p.classList.add('open');
+      p = p.parentElement;
+    }
+    target.classList.add('active');
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setStatus(`Found in tree: ${selector}`);
+  } else {
+    setStatus(`Not found in tree (may be too deep): ${selector}`);
+  }
+}
+
+// ── Rules ──────────────────────────────────────────────────────────────────
+function addRule(selector, label, type = 'remove') {
+  if (rules.some(r => r.selector === selector && r.type === type)) {
+    setStatus(`Rule already exists: ${selector}`); return;
+  }
+  pushUndo(`${type === 'keeponly' ? 'Keep-only' : 'Remove'} rule added: ${selector}`);
+  rules.push({ selector, label: label || selector, type });
+  renderRules();
+  renderPreview();
+  renderTree(document.getElementById('tree-search').value.trim());
+  setStatus(`Rule added: ${type} "${selector}"`);
+}
+
+function removeRule(idx) {
+  pushUndo(`Rule removed: ${rules[idx].selector}`);
+  rules.splice(idx, 1);
+  renderRules();
+  renderPreview();
+  renderTree(document.getElementById('tree-search').value.trim());
+}
+
+function renderRules() {
+  const container = document.getElementById('rules-list');
+  document.getElementById('rules-count').textContent = rules.length;
+  if (!rules.length) {
+    container.innerHTML = '<em style="color:#aaa;font-size:0.72rem">Click elements to add rules.</em>';
+    return;
+  }
+  container.innerHTML = '';
+  rules.forEach((r, i) => {
+    const div = document.createElement('div');
+    div.className = `rule-item type-${r.type}`;
+    const badge = r.type === 'keeponly' ? 'KEEP' : 'DEL';
+    div.innerHTML = `<span class="rule-type-badge">${badge}</span>
+      <span class="rule-selector" title="${r.selector}">${r.selector}</span>
+      <button class="rule-del" onclick="removeRule(${i})">✕</button>`;
+    container.appendChild(div);
+  });
+}
+
+// ── Save / Load / Clear Rules ──────────────────────────────────────────────
+document.getElementById('btn-save-rules').addEventListener('click', () => {
+  if (!rules.length) { setStatus('No rules to save.'); return; }
+  const json = JSON.stringify({ version: 1, rules }, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'epub-rules.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus(`Saved ${rules.length} rule(s) to epub-rules.json`);
+});
+
+document.getElementById('btn-load-rules').addEventListener('click', () => {
+  document.getElementById('rules-file-input').click();
+});
+
+document.getElementById('rules-file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      const loaded = Array.isArray(data) ? data : (data.rules || []);
+      if (!loaded.length) { setStatus('No rules found in file.'); return; }
+      let added = 0, skipped = 0;
+      loaded.forEach(r => {
+        if (!r.selector) return;
+        if (rules.some(x => x.selector === r.selector)) { skipped++; return; }
+        rules.push({ selector: r.selector, label: r.label || r.selector });
+        added++;
+      });
+      renderRules();
+      renderPreview();
+      renderTree(document.getElementById('tree-search').value.trim());
+      setStatus(`Loaded ${added} rule(s)${skipped ? `, ${skipped} already existed` : ''}.`);
+    } catch(err) {
+      setStatus('Failed to parse rules file.');
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('btn-clear-rules').addEventListener('click', () => {
+  if (!rules.length) { setStatus('No rules to clear.'); return; }
+  if (!confirm(`Remove all ${rules.length} rule(s)?`)) return;
+  rules = [];
+  renderRules();
+  renderPreview();
+  renderTree(document.getElementById('tree-search').value.trim());
+  setStatus('All rules cleared.');
+});
+
+// ── Apply Rules ────────────────────────────────────────────────────────────
+function applyRulesToHtml(html) {
+  if (!rules.length) return html;
+  const parser = new DOMParser();
+  const doc    = parser.parseFromString(html, 'text/html');
+
+  // keep-only rules: collect all matching elements, remove everything else from body
+  const keepRules = rules.filter(r => r.type === 'keeponly');
+  if (keepRules.length) {
+    const toKeep = [];
+    keepRules.forEach(r => {
+      try { doc.body.querySelectorAll(r.selector).forEach(el => toKeep.push(el)); } catch(e){}
+    });
+    // clone kept nodes, clear body, re-append
+    const kept = toKeep.map(el => el.cloneNode(true));
+    doc.body.innerHTML = '';
+    kept.forEach(el => doc.body.appendChild(el));
+  }
+
+  // remove rules
+  rules.filter(r => r.type === 'remove').forEach(r => {
+    try { doc.body.querySelectorAll(r.selector).forEach(el => el.remove()); } catch(e){}
+  });
+
+  return doc.documentElement.outerHTML;
+}
+
+// ── Cover Preview ──────────────────────────────────────────────────────────
+async function renderCoverPreview() {
+  const img = document.getElementById('cover-preview');
+  if (newCoverObjectUrl) {
+    img.src = newCoverObjectUrl;
+    return;
+  }
+  if (coverPath) {
+    const f = zip.file(coverPath) || zip.file(decodeURIComponent(coverPath));
+    if (f) {
+      const ab   = await f.async('arraybuffer');
+      const mime = coverPath.match(/\.png$/i) ? 'image/png'
+                 : coverPath.match(/\.webp$/i) ? 'image/webp'
+                 : 'image/jpeg';
+      const blob = new Blob([ab], { type: mime });
+      img.src = URL.createObjectURL(blob);
+      return;
+    }
+  }
+  img.src = '';
+  img.alt = 'No cover found';
+}
+
+// click cover image → open file picker
+document.getElementById('cover-preview').addEventListener('click', () => {
+  document.getElementById('cover-file-input').click();
+});
+
+// drag image onto cover
+const metaPanel = document.getElementById('meta-panel');
+metaPanel.addEventListener('dragover', e => { e.preventDefault(); });
+metaPanel.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = [...e.dataTransfer.files].find(f => f.type.startsWith('image/'));
+  if (file) applyCoverFile(file);
+});
+
+document.getElementById('cover-file-input').addEventListener('change', e => {
+  if (e.target.files[0]) applyCoverFile(e.target.files[0]);
+  e.target.value = '';
+});
+
+async function applyCoverFile(file) {
+  const ab = await file.arrayBuffer();
+  if (newCoverObjectUrl) URL.revokeObjectURL(newCoverObjectUrl);
+  newCoverData = { arrayBuffer: ab, mimeType: file.type };
+  newCoverObjectUrl = URL.createObjectURL(new Blob([ab], { type: file.type }));
+  document.getElementById('cover-preview').src = newCoverObjectUrl;
+  document.getElementById('cover-changed-badge').style.display = 'inline';
+  setStatus('Cover updated — will be saved on download.');
+}
+
+// title change indicator
+document.getElementById('meta-title').addEventListener('input', e => {
+  e.target.classList.toggle('changed', e.target.value.trim() !== epubTitle);
+  updateFilenamePreview();
+});
+
+// ── Find & Replace ─────────────────────────────────────────────────────────
+document.getElementById('btn-find-replace').addEventListener('click', () => {
+  document.getElementById('fnr-modal').classList.add('visible');
+  document.getElementById('fnr-find').focus();
+  document.getElementById('fnr-preview-list').innerHTML = '';
+  document.getElementById('fnr-summary').textContent = '';
+  document.getElementById('btn-fnr-apply').disabled = true;
+});
+
+document.getElementById('btn-fnr-cancel').addEventListener('click', () => {
+  document.getElementById('fnr-modal').classList.remove('visible');
+});
+
+document.getElementById('btn-fnr-preview').addEventListener('click', () => {
+  runFnrPreview();
+});
+
+// also preview on Enter in find field
+document.getElementById('fnr-find').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runFnrPreview();
+});
+
+function buildFnrRegex() {
+  const findVal = document.getElementById('fnr-find').value;
+  if (!findVal) return null;
+  const isRegex = document.getElementById('fnr-regex').checked;
+  const caseSensitive = document.getElementById('fnr-case').checked;
+  const flags = 'g' + (caseSensitive ? '' : 'i');
+  try {
+    return new RegExp(isRegex ? findVal : findVal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+  } catch(e) { return null; }
+}
+
+function getTextFromHtml(html) {
+  const d = new DOMParser().parseFromString(html, 'text/html');
+  return d.body.innerHTML;
+}
+
+function runFnrPreview() {
+  const regex   = buildFnrRegex();
+  const findVal = document.getElementById('fnr-find').value;
+  const replVal = document.getElementById('fnr-replace').value;
+  const scope   = document.getElementById('fnr-scope').value;
+  const listEl  = document.getElementById('fnr-preview-list');
+  const summary = document.getElementById('fnr-summary');
+
+  listEl.innerHTML = '';
+  fnrReplacements = [];
+
+  if (!findVal || !regex) {
+    summary.textContent = 'Enter a search term first.';
+    document.getElementById('btn-fnr-apply').disabled = true;
+    return;
+  }
+
+  const targets = scope === 'current' ? [{ ch: chapters[currentIdx], idx: currentIdx }]
+    : chapters.map((ch, idx) => ({ ch, idx }));
+
+  let totalMatches = 0;
+  let affectedChapters = 0;
+
+  targets.forEach(({ ch, idx }) => {
+    const parser  = new DOMParser();
+    const doc     = parser.parseFromString(ch.originalHtml, 'text/html');
+    // search in text nodes only
+    const walker  = document.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+    let node, matchesInChapter = 0;
+    const textNodes = [];
+    while ((node = walker.nextNode())) textNodes.push(node);
+
+    textNodes.forEach(tn => {
+      const matches = tn.textContent.match(regex);
+      if (matches) matchesInChapter += matches.length;
+    });
+
+    if (matchesInChapter === 0) return;
+    affectedChapters++;
+    totalMatches += matchesInChapter;
+
+    // build replaced html for storage
+    const replaced = ch.originalHtml.replace(regex, replVal);
+    fnrReplacements.push({ chIdx: idx, replaced });
+
+    // build preview row
+    const row = document.createElement('div');
+    row.className = 'fnr-match-row';
+    // show first matching text node context
+    const sample = textNodes.find(tn => regex.test(tn.textContent));
+    regex.lastIndex = 0;
+    const sampleText = sample ? sample.textContent.slice(0, 120) : '';
+    const highlighted = sampleText.replace(regex, m => `<span class="fnr-mark">${m}</span>`);
+    regex.lastIndex = 0;
+    row.innerHTML = `<div class="fnr-ch">Chapter ${idx+1}: ${ch.title} — <strong>${matchesInChapter} match${matchesInChapter !== 1 ? 'es' : ''}</strong></div>
+      <div class="fnr-before">Before: …${highlighted}…</div>
+      <div class="fnr-after">After:  …${sampleText.replace(regex, replVal).slice(0,120)}…</div>`;
+    regex.lastIndex = 0;
+    listEl.appendChild(row);
+  });
+
+  if (totalMatches === 0) {
+    summary.textContent = 'No matches found.';
+    document.getElementById('btn-fnr-apply').disabled = true;
+  } else {
+    summary.textContent = `${totalMatches} match${totalMatches !== 1 ? 'es' : ''} in ${affectedChapters} chapter${affectedChapters !== 1 ? 's' : ''}.`;
+    document.getElementById('btn-fnr-apply').disabled = false;
+  }
+}
+
+document.getElementById('btn-fnr-apply').addEventListener('click', () => {
+  if (!fnrReplacements.length) return;
+  fnrReplacements.forEach(({ chIdx, replaced }) => {
+    chapters[chIdx] = { ...chapters[chIdx], originalHtml: replaced };
+  });
+  const count = fnrReplacements.length;
+  fnrReplacements = [];
+  document.getElementById('fnr-modal').classList.remove('visible');
+  renderPreview();
+  setStatus(`Find & replace applied to ${count} chapter${count !== 1 ? 's' : ''}.`);
+});
+
+// ── Download ───────────────────────────────────────────────────────────────
+document.getElementById('btn-download').addEventListener('click', async () => {
+  if (!zip) return;
+  setStatus('Building EPUB…');
+  const newZip   = new JSZip();
+  const newTitle = document.getElementById('meta-title').value.trim() || epubTitle;
+  const excludedPaths = new Set([...excludedChapters].map(i => chapters[i].path));
+
+  // grab CSS from editor (use live value, not just last previewed)
+  const finalCss = document.getElementById('css-editor').value.trim();
+  const cssFilename = 'epub-editor-custom.css';
+  const cssPath = opfBase + cssFilename;
+
+  for (const [path, file] of Object.entries(zip.files)) {
+    if (file.dir) { newZip.folder(path); continue; }
+    if (excludedPaths.has(path)) continue;
+
+    // chapter HTML
+    const chIdx = chapters.findIndex(c => c.path === path);
+    if (chIdx !== -1) {
+      let cleaned = applyRulesToHtml(chapters[chIdx].originalHtml);
+      if (chapterRenames[chIdx]) {
+        const t = chapterRenames[chIdx];
+        cleaned = cleaned.replace(/(<title[^>]*>)[^<]*(<\/title>)/i, `$1${t}$2`);
+        cleaned = cleaned.replace(/(<h[1-3][^>]*>)[^<]*(<\/h[1-3]>)/i, `$1${t}$2`);
+      }
+      // inject CSS link into <head>
+      if (finalCss) {
+        const relPath = cssFilename; // same directory as chapters (opfBase)
+        const linkTag = `<link rel="stylesheet" type="text/css" href="${relPath}"/>`;
+        if (!cleaned.includes('epub-editor-custom.css')) {
+          cleaned = cleaned.replace(/(<\/head>)/i, `${linkTag}\n$1`);
+          if (!cleaned.includes(linkTag)) cleaned = linkTag + '\n' + cleaned;
+        }
+      }
+      newZip.file(path, cleaned);
+      continue;
+    }
+
+    // OPF
+    if (path === opfPath) {
+      let opfXml = await file.async('string');
+      opfXml = opfXml.replace(/(<dc:title[^>]*>)[^<]*(<\/dc:title>)/i, `$1${newTitle}$2`);
+      opfXml = opfXml.replace(/(<title[^>]*>)[^<]*(<\/title>)/i, `$1${newTitle}$2`);
+      if (excludedChapters.size) {
+        const excludedIds = new Set([...excludedChapters].map(i => chapters[i].id));
+        excludedIds.forEach(id => {
+          opfXml = opfXml.replace(new RegExp(`<itemref[^>]*idref=["']${id}["'][^>]*/?>`, 'g'), '');
+        });
+      }
+      // register custom CSS in manifest
+      if (finalCss && !opfXml.includes('epub-editor-custom.css')) {
+        opfXml = opfXml.replace(/(<\/manifest>)/i,
+          `  <item id="epub-editor-css" href="${cssFilename}" media-type="text/css"/>\n$1`);
+      }
+      newZip.file(path, opfXml);
+      continue;
+    }
+
+    // cover
+    if (newCoverData && coverPath && path === coverPath) {
+      newZip.file(path, newCoverData.arrayBuffer);
+      continue;
+    }
+
+    newZip.file(path, await file.async('arraybuffer'));
+  }
+
+  // write CSS file
+  if (finalCss) newZip.file(cssPath, finalCss);
+
+  const blob     = await newZip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
+  const url      = URL.createObjectURL(blob);
+  const a        = document.createElement('a');
+  const safeName = newTitle.replace(/[^a-z0-9 _-]/gi, '').trim() || 'cleaned';
+  a.href = url; a.download = `${safeName}.epub`; a.click();
+  URL.revokeObjectURL(url);
+  setStatus(`Download started. (${chapters.length - excludedChapters.size} chapters${finalCss ? ' + custom CSS' : ''})`);
+});
+
+// ── Undo ───────────────────────────────────────────────────────────────────
+let undoToastTimer = null;
+
+function pushUndo(msg) {
+  undoStack.push({ rules: JSON.parse(JSON.stringify(rules)), msg });
+  if (undoStack.length > 50) undoStack.shift();
+  showUndoToast(msg);
+}
+
+function showUndoToast(msg) {
+  const toast = document.getElementById('undo-toast');
+  document.getElementById('undo-msg').textContent = msg;
+  toast.classList.add('visible');
+  clearTimeout(undoToastTimer);
+  undoToastTimer = setTimeout(() => toast.classList.remove('visible'), 4000);
+}
+
+document.getElementById('btn-undo').addEventListener('click', () => {
+  if (!undoStack.length) return;
+  const snap = undoStack.pop();
+  rules = snap.rules;
+  renderRules();
+  renderPreview();
+  renderTree(document.getElementById('tree-search').value.trim());
+  document.getElementById('undo-toast').classList.remove('visible');
+  setStatus(`Undone: ${snap.msg}`);
+});
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    if (undoStack.length) document.getElementById('btn-undo').click();
+  }
+});
+
+// ── Rename Chapters ────────────────────────────────────────────────────────
+document.getElementById('btn-rename-chapters').addEventListener('click', () => {
+  openRenameModal();
+});
+
+function openRenameModal() {
+  const list = document.getElementById('rename-list');
+  list.innerHTML = '';
+  chapters.forEach((ch, i) => {
+    const current = chapterRenames[i] !== undefined ? chapterRenames[i] : ch.title;
+    const row = document.createElement('div');
+    row.className = 'rename-row';
+    row.innerHTML = `<span class="ch-num">${i+1}.</span>
+      <input type="text" data-idx="${i}" value="${current.replace(/"/g,'&quot;')}"
+        class="${chapterRenames[i] !== undefined && chapterRenames[i] !== ch.title ? 'changed' : ''}">`;
+    list.appendChild(row);
+  });
+  // track changes
+  list.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const idx = +inp.dataset.idx;
+      inp.classList.toggle('changed', inp.value !== chapters[idx].title);
+    });
+  });
+  document.getElementById('rename-modal').classList.add('visible');
+}
+
+document.getElementById('btn-rename-apply-all').addEventListener('click', () => {
+  const find    = document.getElementById('rename-find').value;
+  const replace = document.getElementById('rename-replace').value;
+  if (!find) return;
+  document.getElementById('rename-list').querySelectorAll('input').forEach(inp => {
+    const idx = +inp.dataset.idx;
+    inp.value = inp.value.split(find).join(replace);
+    inp.classList.toggle('changed', inp.value !== chapters[idx].title);
+  });
+});
+
+document.getElementById('btn-rename-reset').addEventListener('click', () => {
+  document.getElementById('rename-list').querySelectorAll('input').forEach(inp => {
+    const idx = +inp.dataset.idx;
+    inp.value = chapters[idx].title;
+    inp.classList.remove('changed');
+  });
+});
+
+document.getElementById('btn-rename-cancel').addEventListener('click', () => {
+  document.getElementById('rename-modal').classList.remove('visible');
+});
+
+document.getElementById('btn-rename-save').addEventListener('click', () => {
+  chapterRenames = {};
+  document.getElementById('rename-list').querySelectorAll('input').forEach(inp => {
+    const idx = +inp.dataset.idx;
+    const val = inp.value.trim();
+    if (val && val !== chapters[idx].title) chapterRenames[idx] = val;
+  });
+  document.getElementById('rename-modal').classList.remove('visible');
+  renderChapterList();
+  const count = Object.keys(chapterRenames).length;
+  setStatus(count ? `${count} chapter title(s) renamed.` : 'No changes made.');
+});
+
+// ── CSS Editor ─────────────────────────────────────────────────────────────
+let customCss = '';  // the CSS to bundle on download
+
+// Tab switching
+document.getElementById('tab-tree').addEventListener('click', () => {
+  document.getElementById('tab-tree').classList.add('active');
+  document.getElementById('tab-css').classList.remove('active');
+  document.getElementById('right-tree-pane').classList.add('active');
+  document.getElementById('right-css-pane').classList.remove('active');
+});
+document.getElementById('tab-css').addEventListener('click', () => {
+  document.getElementById('tab-css').classList.add('active');
+  document.getElementById('tab-tree').classList.remove('active');
+  document.getElementById('right-css-pane').classList.add('active');
+  document.getElementById('right-tree-pane').classList.remove('active');
+});
+
+// Presets
+const CSS_PRESETS = {
+  readable: `body {
+  font-family: Georgia, serif;
+  font-size: 1rem;
+  line-height: 1.75;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 1em 1.5em;
+  color: #1a1a1a;
+}
+p {
+  margin-bottom: 0.9em;
+  text-indent: 0;
+}
+h1, h2, h3 {
+  font-family: Georgia, serif;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}`,
+  compact: `body {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0.5em 1em;
+}
+p { margin-bottom: 0.4em; }`,
+  justify: `body { text-align: justify; }
+p { text-align: justify; hyphens: auto; }`,
+  clean: `body { margin: 0; padding: 1em 2em; }
+nav, header, footer, .nav-btn-group, .download-app { display: none !important; }
+img { max-width: 100%; height: auto; }`,
+};
+
+document.getElementById('css-presets').addEventListener('click', e => {
+  const preset = e.target.dataset.preset;
+  if (!preset) return;
+  if (preset === 'clear') {
+    document.getElementById('css-editor').value = '';
+    clearQuickControls();
+    setCssStatus('CSS cleared.');
+    return;
+  }
+  document.getElementById('css-editor').value = CSS_PRESETS[preset] || '';
+  clearQuickControls();
+  setCssStatus(`Preset "${preset}" loaded.`);
+});
+
+function clearQuickControls() {
+  ['qcss-fontsize','qcss-lineheight','qcss-paraspacing','qcss-maxwidth'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('qcss-fontfamily').value = '';
+  document.getElementById('qcss-textalign').value = '';
+}
+
+// Quick controls → regenerate CSS block at top of editor
+function buildQuickCss() {
+  const fontSize    = document.getElementById('qcss-fontsize').value.trim();
+  const lineHeight  = document.getElementById('qcss-lineheight').value.trim();
+  const fontFamily  = document.getElementById('qcss-fontfamily').value;
+  const paraSpacing = document.getElementById('qcss-paraspacing').value.trim();
+  const textAlign   = document.getElementById('qcss-textalign').value;
+  const maxWidth    = document.getElementById('qcss-maxwidth').value.trim();
+
+  const bodyRules = [];
+  if (fontSize)   bodyRules.push(`  font-size: ${fontSize};`);
+  if (lineHeight) bodyRules.push(`  line-height: ${lineHeight};`);
+  if (fontFamily) bodyRules.push(`  font-family: ${fontFamily};`);
+  if (textAlign)  bodyRules.push(`  text-align: ${textAlign};`);
+  if (maxWidth)   bodyRules.push(`  max-width: ${maxWidth};\n  margin-left: auto;\n  margin-right: auto;`);
+
+  const pRules = [];
+  if (paraSpacing) pRules.push(`  margin-bottom: ${paraSpacing};`);
+
+  let out = '';
+  if (bodyRules.length) out += `body {\n${bodyRules.join('\n')}\n}\n`;
+  if (pRules.length)    out += `p {\n${pRules.join('\n')}\n}\n`;
+  return out;
+}
+
+document.getElementById('btn-css-sync-quick').addEventListener('click', () => {
+  const quick = buildQuickCss();
+  // replace existing quick-generated block (between /* quick-start */ and /* quick-end */) or prepend
+  const editor = document.getElementById('css-editor');
+  const existing = editor.value;
+  if (existing.includes('/* quick-start */')) {
+    editor.value = existing.replace(/\/\* quick-start \*\/[\s\S]*?\/\* quick-end \*\//,
+      `/* quick-start */\n${quick}/* quick-end */`);
+  } else {
+    editor.value = `/* quick-start */\n${quick}/* quick-end */\n${existing}`;
+  }
+  setCssStatus('Quick controls synced to editor.');
+});
+
+// also auto-sync on any quick control change
+['qcss-fontsize','qcss-lineheight','qcss-paraspacing','qcss-maxwidth',
+ 'qcss-fontfamily','qcss-textalign'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    document.getElementById('btn-css-sync-quick').click();
+  });
+});
+
+// Preview — inject a <style> tag into the preview frame
+document.getElementById('css-preview-btn').addEventListener('click', () => {
+  const css = document.getElementById('css-editor').value.trim();
+  if (!css) { setCssStatus('Nothing to preview — write some CSS first.'); return; }
+  const frame = document.getElementById('preview-frame');
+  let styleEl = frame.querySelector('#epub-editor-preview-style');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'epub-editor-preview-style';
+    frame.prepend(styleEl);
+  }
+  styleEl.textContent = css;
+  customCss = css;
+  setCssStatus('Preview updated. CSS will be bundled on download.');
+});
+
+document.getElementById('css-clear-preview-btn').addEventListener('click', () => {
+  const frame = document.getElementById('preview-frame');
+  const styleEl = frame.querySelector('#epub-editor-preview-style');
+  if (styleEl) styleEl.remove();
+  setCssStatus('Preview CSS cleared.');
+});
+
+function setCssStatus(msg) {
+  document.getElementById('css-status').textContent = msg;
+}
+
+// ── Filename Preview ───────────────────────────────────────────────────────
+function updateFilenamePreview() {
+  const title = document.getElementById('meta-title').value.trim() || epubTitle || 'cleaned';
+  const safe  = title.replace(/[^a-z0-9 _-]/gi, '').trim() || 'cleaned';
+  document.getElementById('filename-span').textContent = `${safe}.epub`;
+}
+
+document.getElementById('meta-title').addEventListener('input', () => {
+  updateFilenamePreview();
+  // existing changed indicator
+  const inp = document.getElementById('meta-title');
+  inp.classList.toggle('changed', inp.value.trim() !== epubTitle);
+});
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+</script>
+</body>
+</html>

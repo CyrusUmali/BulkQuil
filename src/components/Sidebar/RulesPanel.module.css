@@ -1,0 +1,81 @@
+.section { display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 1px solid rgba(197,198,203,0.18); }
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+.sectionLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--outline);
+}
+.headActions { display: flex; gap: 10px; }
+.headBtn {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--outline);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+}
+.headBtn:hover { color: var(--primary); }
+.dangerBtn:hover { color: var(--error) !important; }
+
+.list { display: flex; flex-direction: column; gap: 4px; }
+.empty { font-size: 12px; color: var(--outline); font-style: italic; padding: 4px 2px; }
+
+.rule {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid;
+}
+.remove   { background: rgba(254, 243, 199, 0.6); border-color: rgba(251,191,36,0.3); }
+.keeponly { background: rgba(209, 250, 229, 0.6); border-color: rgba(52,211,153,0.3); }
+
+.badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.remove   .badge { background: rgba(251,191,36,0.35); color: #78350f; }
+.keeponly .badge { background: rgba(52,211,153,0.35); color: #064e3b; }
+
+.selector {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--outline-var);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.rule:hover .del { opacity: 1; }
+.del:hover { color: var(--error); }

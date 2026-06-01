@@ -1,0 +1,71 @@
+.pane { display: flex; flex-direction: column; flex: 1; overflow: hidden; padding: 12px; gap: 8px; }
+
+.searchWrap {
+  position: relative;
+}
+.searchIcon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--outline);
+  pointer-events: none;
+}
+.search {
+  width: 100%;
+  height: 34px;
+  background: rgba(224,226,231,0.55);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 0 10px 0 32px;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--on-surface);
+  outline: none;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.search:focus { background: rgba(255,255,255,0.8); box-shadow: 0 0 0 2px rgba(91,66,184,0.2); }
+.search::placeholder { color: var(--outline); }
+
+.tree { font-size: 12px; overflow-y: auto; flex: 1; font-family: var(--font-mono); }
+
+.node { user-select: none; }
+.row {
+  display: flex;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  gap: 4px;
+  transition: background 0.12s;
+}
+.row:hover { background: rgba(224,226,231,0.55); }
+.active { background: rgba(230,222,255,0.4) !important; }
+.ruled  { background: rgba(254,226,226,0.45) !important; }
+
+.toggle { width: 14px; flex-shrink: 0; color: var(--outline); font-size: 10px; text-align: center; }
+.tag    { color: #1d4ed8; font-weight: 600; font-size: 11.5px; flex-shrink: 0; }
+.id     { color: #b45309; font-size: 11px; }
+.cls    { color: var(--outline); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.preview{ color: var(--outline-var); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 2; font-family: var(--font-body); font-style: italic; }
+
+.actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
+.row:hover .actions { opacity: 1; }
+.actions button {
+  font-size: 10px;
+  font-family: var(--font-body);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--outline-var);
+  background: rgba(255,255,255,0.7);
+  cursor: pointer;
+  color: var(--on-surface-var);
+  transition: all 0.12s;
+}
+.actions button:hover { background: var(--surface-mid); color: var(--primary); }
+.danger { border-color: rgba(186,26,26,0.3) !important; color: var(--error) !important; }
+.danger:hover { background: rgba(186,26,26,0.08) !important; }
+
+.children { display: none; border-left: 1px solid rgba(197,198,203,0.3); margin-left: 9px; }
+.open { display: block; }

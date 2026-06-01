@@ -1,0 +1,157 @@
+@import url("https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    /* — Core palette — */
+    --primary: #0d0d0d;
+    --on-primary: #ffffff;
+    --secondary: #5b42b8;
+    --secondary-dim: #7c63d4;
+    --secondary-fixed: #ede8ff;
+    --secondary-fixed-dim: #c9befd;
+    --surface: #f7f8fb;
+    --surface-low: #f0f2f6;
+    --surface-mid: #e8eaee;
+    --surface-high: #e0e2e7;
+    --surface-highest: #d8dade;
+    --on-surface: #18191c;
+    --on-surface-var: #44454a;
+    --outline: #75767b;
+    --outline-var: #c5c6cb;
+    --error: #ba1a1a;
+
+    /* — Accent blobs — */
+    --blob-blue: #74a0ed;
+    --blob-purple: #b196f9;
+    --blob-pink: #f9aefb;
+    --blob-cyan: #a3e4ff;
+
+    /* — Spacing — */
+    --sidebar-w: 280px;
+    --header-h: 64px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-full: 9999px;
+
+    /* — Typography — */
+    --font-display: "Hanken Grotesk", sans-serif;
+    --font-body: "DM Sans", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+
+    /* — Glass — */
+    --glass-bg: rgba(255, 255, 255, 0.68);
+    --glass-border: rgba(255, 255, 255, 0.55);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+}
+
+html,
+body,
+#root {
+    height: 100%;
+}
+
+body {
+    font-family: var(--font-body);
+    background: var(--surface);
+    color: var(--on-surface);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--outline-var);
+    border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--outline);
+}
+
+/* Ambient blobs */
+.blob-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+.blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(110px);
+    opacity: 0.5 !important;
+    mix-blend-mode: normal;
+    /* animation: blobFloat 18s ease-in-out infinite alternate;/ */
+}
+.blob-1 {
+    width: 700px;
+    height: 700px;
+    background: radial-gradient(circle, var(--blob-blue) 0%, transparent 70%);
+    top: -220px;
+    right: -80px;
+    opacity: 0.22;
+}
+.blob-2 {
+    width: 800px;
+    height: 800px;
+    background: radial-gradient(circle, var(--blob-purple) 0%, transparent 70%);
+    bottom: -280px;
+    left: -120px;
+    opacity: 0.2; 
+}
+.blob-3 {
+    width: 550px;
+    height: 550px;
+    background: radial-gradient(circle, var(--blob-pink) 0%, transparent 70%);
+    top: 12%;
+    left: 8%;
+    opacity: 0.14; 
+}
+.blob-4 {
+    width: 620px;
+    height: 620px;
+    background: radial-gradient(circle, var(--blob-cyan) 0%, transparent 70%);
+    bottom: 8%;
+    right: 12%;
+    opacity: 0.18; 
+}
+
+@keyframes blobFloat {
+    0% {
+        transform: translate(0, 0) scale(1);
+    }
+    100% {
+        transform: translate(80px, 80px) scale(1.08);
+    }
+}
+
+/* Glass panel utility */
+.glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+}
+
+/* Selection */
+::selection {
+    background: var(--secondary-fixed);
+}
