@@ -55,10 +55,13 @@
 .filename span { color: var(--on-surface-var); font-weight: 500; }
 
 .actionsRow {
-  display: flex;
+  display: flex; 
   gap: 6px;
   margin-bottom: 4px;
 }
+
+ 
+
 .actionBtn {
   flex: 1;
   height: 32px;

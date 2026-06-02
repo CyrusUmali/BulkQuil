@@ -3,6 +3,8 @@ import ChapterList from './ChapterList';
 import RulesPanel from './RulesPanel';
 import styles from './Sidebar.module.css';
 
+import { IconZoom ,IconEdit } from '@tabler/icons-react';
+
 export default function Sidebar({
   coverUrl, epubTitle, currentTitle, coverChanged, onCoverChange, onTitleChange,
   chapters, currentIdx, chapterRenames, excludedChapters, onSelectChapter, onToggleExclude,
@@ -22,8 +24,10 @@ export default function Sidebar({
         />
         <div>
           <div className={styles.actionsRow}>
-            <button className={styles.actionBtn} onClick={onRenameChapters}>✏ Rename</button>
-            <button className={styles.actionBtn} onClick={onFindReplace}>⌕ Find & Replace</button>
+            <button className={styles.actionBtn} onClick={onRenameChapters}> <IconEdit stroke={1} size={20} /> Rename</button>
+            <button className={styles.actionBtn} onClick={onFindReplace}>
+            <IconZoom stroke={1} size={20} />
+              Find & Replace</button>
           </div>
         </div>
         <RulesPanel

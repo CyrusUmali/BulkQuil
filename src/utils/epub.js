@@ -1,18 +1,11 @@
 // ── Selector helpers ───────────────────────────────────────────────────────
-
-
-
-
 export function buildSelector(el) {
-  const TRANSIENT = ['pv-hover', 'pv-live', 'pv-hl'];
-  
   if (el.id) return `#${CSS.escape(el.id)}`;
   const tag = el.tagName.toLowerCase();
   if (['nav','header','footer','main','aside','article','h1','h2','h3'].includes(tag)) return tag;
   if (el.classList.length) {
     const meaningful = [...el.classList].filter(
-      c => !TRANSIENT.includes(c) &&   // ← strip transient classes
-           c.length > 2 && !c.startsWith('sm:') && !c.startsWith('&') && !c.startsWith('<')
+      c => c.length > 2 && !c.startsWith('sm:') && !c.startsWith('&') && !c.startsWith('<')
     );
     if (meaningful.length) {
       return tag + '.' + meaningful.slice(0, 2).map(c => CSS.escape(c)).join('.');
@@ -21,7 +14,6 @@ export function buildSelector(el) {
   return tag;
 }
 
-
 export function buildLabel(el) {
   const tag = el.tagName.toLowerCase();
   const id  = el.id ? `#${el.id}` : '';
@@ -29,12 +21,32 @@ export function buildLabel(el) {
   return `<${tag}${id}${cls}>`;
 }
 
-// ── Apply rules to HTML string ─────────────────────────────────────────────
 export function applyRulesToHtml(html, rules) {
   if (!rules.length) return html;
-  const parser = new DOMParser();
-  const doc    = parser.parseFromString(html, 'text/html');
 
+  const xmlDeclMatch = html.match(/^(<\?xml[^?]*\?>)/);
+  // ── FIX: strip ALL DOCTYPE occurrences from the source first,
+  // then use only the first one we captured.
+  const doctypeMatch  = html.match(/(<!DOCTYPE[^>]*>)/i);
+  const xmlDecl       = xmlDeclMatch ? xmlDeclMatch[1] + '\n' : '';
+  const doctype       = doctypeMatch ? doctypeMatch[1] + '\n' : '';
+
+  // ── FIX: remove ALL doctype declarations from html before parsing
+  // so XMLSerializer doesn't see/duplicate them
+  const cleanedHtml = html
+    .replace(/^<\?xml[^?]*\?>\s*/i, '')   // strip xml decl
+    .replace(/<!DOCTYPE[^>]*>\s*/gi, ''); // strip ALL doctypes (handles duplicates in source)
+
+  const parser = new DOMParser();
+  let doc      = parser.parseFromString(cleanedHtml, 'application/xhtml+xml');
+  let useXml   = true;
+
+  if (doc.documentElement.nodeName === 'parsererror' || doc.querySelector('parsererror')) {
+    doc    = parser.parseFromString(cleanedHtml, 'text/html');
+    useXml = false;
+  }
+
+  // Apply keep-only rules
   const keepRules = rules.filter(r => r.type === 'keeponly');
   if (keepRules.length) {
     const toKeep = [];
@@ -46,12 +58,30 @@ export function applyRulesToHtml(html, rules) {
     kept.forEach(el => doc.body.appendChild(el));
   }
 
+  // Apply remove rules
   rules.filter(r => r.type === 'remove').forEach(r => {
     try { doc.body.querySelectorAll(r.selector).forEach(el => el.remove()); } catch (e) {}
   });
 
+  if (useXml) {
+    let serialised = new XMLSerializer().serializeToString(doc);
+    serialised = serialised.replace(/^<\?xml[^?]*\?>\s*/i, '');
+    serialised = serialised.replace(/ xmlns="http:\/\/www\.w3\.org\/1999\/xhtml"/g, '');
+    serialised = serialised.replace(
+      /(<html\b)([^>]*?)(>)/,
+      (_, open, attrs, close) => {
+        const cleanAttrs = attrs.replace(/\s*xmlns="[^"]*"/g, '');
+        return `${open} xmlns="http://www.w3.org/1999/xhtml"${cleanAttrs}${close}`;
+      }
+    );
+    // ── prepend exactly one xml decl + one doctype
+    return xmlDecl + doctype + serialised;
+  }
+
   return doc.documentElement.outerHTML;
 }
+
+
 
 // ── Extract title from HTML ────────────────────────────────────────────────
 export function extractTitle(html, fallback) {
@@ -154,12 +184,16 @@ export async function buildDownloadZip(JSZip, {
         cleaned = cleaned.replace(/(<title[^>]*>)[^<]*(<\/title>)/i, `$1${t}$2`);
         cleaned = cleaned.replace(/(<h[1-3][^>]*>)[^<]*(<\/h[1-3]>)/i, `$1${t}$2`);
       }
-      if (finalCss) {
-        const linkTag = `<link rel="stylesheet" type="text/css" href="${cssFilename}"/>`;
-        if (!cleaned.includes('epub-editor-custom.css')) {
-          cleaned = cleaned.replace(/(<\/head>)/i, `${linkTag}\n$1`);
-          if (!cleaned.includes(linkTag)) cleaned = linkTag + '\n' + cleaned;
+      if (finalCss && !cleaned.includes('epub-editor-custom.css')) {
+        // Self-closing link tag — required for valid XHTML in EPUB readers
+        const linkTag = `<link rel="stylesheet" type="text/css" href="../${cssFilename}"/>`;
+        // const linkTag = `<link rel="stylesheet" type="text/css" href="../epub-editor-custom.css"/>`;
+        if (cleaned.includes('</head>')) {
+          cleaned = cleaned.replace(/(<\/head>)/i, `  ${linkTag}\n$1`);
+        } else if (cleaned.includes('</Head>')) {
+          cleaned = cleaned.replace('</Head>', `  ${linkTag}\n</Head>`);
         }
+        // If no </head> found, do nothing — broken source, don't make it worse
       }
       newZip.file(path, cleaned);
       continue;

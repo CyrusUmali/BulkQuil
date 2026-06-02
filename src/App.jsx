@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import JSZip from 'jszip';
-
 import { IconEraser, IconCode, IconEye } from '@tabler/icons-react';
 import UploadZone from './components/UploadZone';
 import Sidebar from './components/Sidebar/Sidebar';
@@ -10,7 +9,7 @@ import ActionBar from './components/modals/ActionBar';
 import RenameModal from './components/modals/RenameModal';
 import FindReplaceModal from './components/modals/FindReplaceModal';
 import UndoToast from './components/modals/UndoToast';
-
+import HelpModal from './components/modals/HelpModal';
 import { useEpub } from './hooks/useEpub';
 import { useRules } from './hooks/useRules';
 import { buildDownloadZip } from './utils/epub';
@@ -26,8 +25,9 @@ export default function App() {
   const [currentTitle, setCurrentTitle] = useState('');
   const [coverChanged, setCoverChanged] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [fnrOpen, setFnrOpen] = useState(false);
-  const [customCss, setCustomCss] = useState('');
+  const [customCss, setCustomCss] = useState('');  // ← single source of truth for CSS
   const [actionBar, setActionBar] = useState({ visible: false, x: 0, y: 0, origLabel: '', selector: '' });
 
   const previewRef = useRef(null);
@@ -42,6 +42,7 @@ export default function App() {
   const handleSelectElement = ({ selector, label, x, y }) => setActionBar({ visible: true, x, y, origLabel: label, selector });
   const handleRemoveRule = (sel) => { if (!sel) return; const r = rulesApi.addRule(sel, sel, 'remove', rulesApi.rules); epub.setStatus(r?.error || r?.msg || ''); setActionBar(p => ({ ...p, visible: false })); };
   const handleKeepOnly = (sel) => { if (!sel) return; const r = rulesApi.addRule(sel, sel, 'keeponly', rulesApi.rules); epub.setStatus(r?.error || r?.msg || ''); setActionBar(p => ({ ...p, visible: false })); };
+
   const handleHighlightTree = (sel) => {
     console.log("[App] handleHighlightTree called with:", sel);
     console.log("[App] rightPanelRef.current:", rightPanelRef.current);
@@ -49,6 +50,7 @@ export default function App() {
     rightPanelRef.current?.highlightInTree(sel);
     epub.setStatus(`Tree: ${sel}`);
   };
+
   const handleHighlightPreview = (sel) => { previewRef.current?.highlightSelector(sel); epub.setStatus(`Highlighting: ${sel}`); };
   const handleAddRuleFromTree = (sel, label, type) => { const r = rulesApi.addRule(sel, label, type, rulesApi.rules); epub.setStatus(r?.error || r?.msg || ''); };
 
@@ -58,6 +60,7 @@ export default function App() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'epub-rules.json'; a.click();
     epub.setStatus(`Saved ${rulesApi.rules.length} rules.`);
   };
+
   const handleLoadRules = (file) => {
     if (!file) return;
     const reader = new FileReader();
@@ -71,14 +74,18 @@ export default function App() {
     };
     reader.readAsText(file);
   };
+
   const handleClearRules = () => {
     if (!rulesApi.rules.length) { epub.setStatus('No rules to clear.'); return; }
     if (!confirm(`Remove all ${rulesApi.rules.length} rule(s)?`)) return;
     rulesApi.clearRules(); epub.setStatus('Rules cleared.');
   };
+
   const handleSaveRenames = (renames) => { setChapterRenames(renames); setRenameOpen(false); epub.setStatus(`${Object.keys(renames).length} chapter(s) renamed.`); };
   const handleFnrApply = (repls) => { repls.forEach(({ chIdx, replaced }) => epub.applyChapterContent(chIdx, replaced)); setFnrOpen(false); epub.setStatus(`Applied to ${repls.length} chapter(s).`); };
-  const handleCssPreview = (css) => { setCustomCss(css); previewRef.current?.injectCss(css); };
+
+  // CHANGE 1: preview only injects into the frame — customCss is already live via onCssChange
+  const handleCssPreview = (css) => { previewRef.current?.injectCss(css); };
   const handleCssClearPreview = () => { previewRef.current?.clearCss(); };
 
   const handleDownload = async () => {
@@ -94,7 +101,6 @@ export default function App() {
     } catch (e) { epub.setStatus('Error: ' + e.message); }
   };
 
-
   const handleLogoClick = () => {
     if (epub.loaded) {
       epub.reset();
@@ -104,7 +110,7 @@ export default function App() {
       setCoverChanged(false);
       setCustomCss('');
       setActionBar({ visible: false, x: 0, y: 0, origLabel: '', selector: '' });
-      epub.setStatus(''); // Clear any status messages
+      epub.setStatus('');
     }
   };
 
@@ -127,95 +133,65 @@ export default function App() {
 
       {/* AppBar */}
       <header className={styles.header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
+        <div className={styles.headerLeft}>
           <img
             className={styles.logo}
             src="/BulkQuil.png"
-            alt=""
+            alt="BulkQuil Logo"
             onClick={handleLogoClick}
             style={{ cursor: epub.loaded ? 'pointer' : 'default' }}
           />
-          {/* <nav className={styles.nav}>
-            <a href="#" className={`${styles.navLink} ${epub.loaded ? '' : styles.navLinkActive}`}>Library</a>
-            <a href="#" className={`${styles.navLink} ${epub.loaded ? styles.navLinkActive : ''}`}>Tools</a>
-            <a href="#" className={styles.navLink}>Export</a>
-          </nav> */}
         </div>
         <div className={styles.headerRight}>
-          {/* <button className={styles.iconBtn} title="Settings">⚙</button> */}
-          <button className={styles.iconBtn} title="Help">?</button>
-          {/* <div className={styles.avatar} title="Profile">M</div> */}
+          <button className={styles.iconBtn} title="Help" onClick={() => setHelpOpen(true)}>?</button>
         </div>
       </header>
 
       {/* Upload landing */}
       {!epub.loaded && (
-        <main style={{ position: 'relative', zIndex: 1, padding: '80px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 48 }}>
-          <div style={{ textAlign: 'center', maxWidth: 560 }}>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 48, fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--primary)', marginBottom: 12, lineHeight: 1.1 }}>
-              The Intelligent<br />EPUB Editor
+        <main className={styles.landing}>
+          <div className={styles.heroSection}>
+            <h1 className={styles.heroTitle}>
+              The Intelligent EPUB Editor
             </h1>
-            <p style={{ fontSize: 15, color: 'var(--on-surface-var)', lineHeight: 1.7 }}>
+            <p className={styles.heroSubtitle}>
               Craft, clean, and control your manuscripts with precision.<br />A modern canvas designed for authors and publishers.
             </p>
           </div>
+
           <UploadZone onFile={epub.loadFile} />
 
-
-
-
-
-          <div style={{ textAlign: 'center', maxWidth: 560 }}>
-            <h4 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 500, letterSpacing: '-0.03em', color: 'var(--primary)', marginBottom: 12, lineHeight: 1.1 }}>
-              Intelligent Capabilities
-            </h4>
-            <p style={{ fontSize: 15, color: 'var(--on-surface-var)', lineHeight: 1.7 }}>
-              Tools designed to stay out your way
-            </p>
+          <div className={styles.featuresHeader}>
+            <h4 className={styles.featuresTitle}>Intelligent Capabilities</h4>
+            <p className={styles.featuresSubtitle}>Tools designed to stay out your way</p>
           </div>
-
-
-
-
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16, maxWidth: 760, width: '100%' }}>
+          <div className={styles.featuresGrid}>
             {[
               {
                 icon: <IconEraser stroke={2} />,
                 title: 'Smart Cleaning',
                 desc: 'Strip redundant styles, fix malformed HTML, standardize structure with CSS selector rules.',
-                iconBg: 'rgba(59, 130, 246, 0.1)' // Blue
+                iconBg: 'rgba(59, 130, 246, 0.1)'
               },
               {
                 icon: <IconCode stroke={2} />,
                 title: 'CSS Control',
                 desc: 'Manage global styles. Inject custom CSS that travels with your EPUB on download.',
-                iconBg: 'rgba(16, 185, 129, 0.1)' // Green
+                iconBg: 'rgba(16, 185, 129, 0.1)'
               },
               {
                 icon: <IconEye stroke={2} />,
                 title: 'Live Preview',
                 desc: 'Click any element to inspect, remove, or keep it. See changes instantly.',
-                iconBg: 'rgba(245, 158, 11, 0.1)' // Amber
+                iconBg: 'rgba(245, 158, 11, 0.1)'
               },
             ].map(c => (
-              <div key={c.title} style={{ background: 'rgba(255,255,255,0.65)', backdropFilter: 'blur(16px)', border: '1px solid rgba(197,198,203,0.35)', borderRadius: 'var(--radius-lg)', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
-                <div style={{
-                  fontSize: 24,
-                  marginBottom: 10,
-                  color: 'var(--primary)',
-                  background: c.iconBg,
-                  width: '48px',
-                  height: '48px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '12px'
-                }}>
+              <div key={c.title} className={styles.featureCard}>
+                <div className={styles.featureIcon} style={{ background: c.iconBg }}>
                   {c.icon}
                 </div>
-                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: 'var(--primary)', marginBottom: 6 }}>{c.title}</h3>
-                <p style={{ fontSize: 12.5, color: 'var(--on-surface-var)', lineHeight: 1.6 }}>{c.desc}</p>
+                <h3 className={styles.featureCardTitle}>{c.title}</h3>
+                <p className={styles.featureCardDesc}>{c.desc}</p>
               </div>
             ))}
           </div>
@@ -224,7 +200,7 @@ export default function App() {
 
       {/* Editor workspace */}
       {epub.loaded && (
-        <div className={styles.workspace} style={{ position: 'relative', zIndex: 1 }}>
+        <div className={styles.workspace}>
           <Sidebar
             coverUrl={epub.coverUrl} epubTitle={epub.epubTitle} currentTitle={currentTitle}
             coverChanged={coverChanged} onCoverChange={handleCoverChange} onTitleChange={setCurrentTitle}
@@ -240,10 +216,12 @@ export default function App() {
             viewMode={viewMode} onViewModeChange={setViewMode}
             onSelectElement={handleSelectElement} status={epub.status}
           />
+          {/* CHANGE 2 + 3: pass cssValue and onCssChange so CssPane always syncs to App state */}
           <RightPanel
             ref={rightPanelRef}
             chapter={currentChapter} rules={rulesApi.rules}
             onAddRule={handleAddRuleFromTree} onHighlightPreview={handleHighlightPreview}
+            cssValue={customCss} onCssChange={setCustomCss}
             onCssPreview={handleCssPreview} onCssClearPreview={handleCssClearPreview}
           />
         </div>
@@ -259,6 +237,7 @@ export default function App() {
       <RenameModal visible={renameOpen} chapters={epub.chapters} chapterRenames={chapterRenames} onSave={handleSaveRenames} onClose={() => setRenameOpen(false)} />
       <FindReplaceModal visible={fnrOpen} chapters={epub.chapters} currentIdx={epub.currentIdx} onApply={handleFnrApply} onClose={() => setFnrOpen(false)} />
       <UndoToast visible={rulesApi.toastVisible} message={rulesApi.toastMsg} onUndo={rulesApi.undo} />
+      <HelpModal visible={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }

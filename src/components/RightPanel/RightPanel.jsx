@@ -4,22 +4,18 @@ import CssPane from './CssPane';
 import styles from './RightPanel.module.css';
 
 const RightPanel = forwardRef(function RightPanel(
-  { chapter, rules, onAddRule, onHighlightPreview, onCssPreview, onCssClearPreview },
+  { chapter, rules, onAddRule, onHighlightPreview,
+    cssValue, onCssChange, onCssPreview, onCssClearPreview },
   ref
 ) {
   const [activeTab, setActiveTab] = useState('tree');
   const treePaneRef = useRef(null);
 
-  // Expose highlightInTree to App — also switches to tree tab
   useImperativeHandle(ref, () => ({
     highlightInTree(selector) {
-      console.log('[RightPanel] highlightInTree called, switching to tree tab, selector:', selector);
+      console.log('[RightPanel] highlightInTree called, selector:', selector);
       setActiveTab('tree');
-      // Wait one tick for the tab switch to render TreePane before calling into it
-      setTimeout(() => {
-        console.log('[RightPanel] calling treePaneRef.current.highlightInTree, ref:', treePaneRef.current);
-        treePaneRef.current?.highlightInTree(selector);
-      }, 0);
+      treePaneRef.current?.highlightInTree(selector);
     },
   }));
 
@@ -35,17 +31,26 @@ const RightPanel = forwardRef(function RightPanel(
           onClick={() => setActiveTab('css')}
         >CSS</button>
       </div>
+
       <div className={styles.paneWrapper}>
-        {activeTab === 'tree'
-          ? <TreePane
-              ref={treePaneRef}
-              chapter={chapter}
-              rules={rules}
-              onAddRule={onAddRule}
-              onHighlightPreview={onHighlightPreview}
-            />
-          : <CssPane onPreview={onCssPreview} onClearPreview={onCssClearPreview} />
-        }
+        {/* Both panes stay mounted so treePaneRef is never null */}
+        <div style={{ display: activeTab === 'tree' ? 'flex' : 'none', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          <TreePane
+            ref={treePaneRef}
+            chapter={chapter}
+            rules={rules}
+            onAddRule={onAddRule}
+            onHighlightPreview={onHighlightPreview}
+          />
+        </div>
+        <div style={{ display: activeTab === 'css' ? 'flex' : 'none', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+          <CssPane
+            cssValue={cssValue}
+            onCssChange={onCssChange}
+            onPreview={onCssPreview}
+            onClearPreview={onCssClearPreview}
+          />
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import styles from './ActionBar.module.css';
 
+import { IconRowRemove , IconListTree , IconArchive } from '@tabler/icons-react';
 export default function ActionBar({ visible, x, y, origLabel, initialSelector, previewFrameRef, onRemove, onKeepOnly, onHighlightTree, onClose }) {
 
   
@@ -87,10 +88,10 @@ useEffect(() => {
         />
         <span className={`${styles.count} ${styles[matchInfo.state] || ''}`}>{matchLabel()}</span>
       </div>
-      <div className={styles.bottom}>
-        <button onClick={() => onRemove(selector)}>✕ Remove</button>
-        <button className={styles.safeBtn} onClick={() => onKeepOnly(selector)}>◎ Keep only</button>
-        <button className={styles.safeBtn} onClick={() => onHighlightTree(selector)}>⊙ Tree</button>
+      <div className={styles.bottom}> 
+        <button onClick={() => onRemove(selector)}><IconRowRemove stroke={1} size={13} /> Remove</button>
+        <button className={styles.safeBtn} onClick={() => onKeepOnly(selector)}><IconArchive  stroke={1} size={13} /> Keep only</button>
+        <button className={styles.safeBtn} onClick={() => onHighlightTree(selector)}> <IconListTree  stroke={1} size={13} />  Tree</button>
       </div>
     </div>
   );
