@@ -1,12 +1,16 @@
-import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react';
 import { buildSelector, buildLabel, applyRulesToHtml } from '../utils/epub';
 import styles from './PreviewPanel.module.css';
+
+import { IconArrowUp, IconArrowDown } from '@tabler/icons-react';
 
 const PreviewPanel = forwardRef(function PreviewPanel(
   { chapter, rules, viewMode, onViewModeChange, onSelectElement, status },
   ref
 ) {
   const frameRef = useRef(null);
+  const scrollAreaRef = useRef(null);
+  const [atBottom, setAtBottom] = useState(false);
 
   useImperativeHandle(ref, () => ({
     highlightSelector(selector) {
@@ -38,6 +42,32 @@ const PreviewPanel = forwardRef(function PreviewPanel(
     },
   }));
 
+  const handleScroll = () => {
+    if (scrollAreaRef.current) {
+      if (!atBottom) {
+        // Scroll to bottom
+        scrollAreaRef.current.scrollTo({
+          top: scrollAreaRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      } else {
+        // Scroll to top
+        scrollAreaRef.current.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      }
+    }
+  };
+
+  const checkScrollPosition = () => {
+    if (scrollAreaRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollAreaRef.current;
+      const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
+      setAtBottom(isAtBottom);
+    }
+  };
+
   useEffect(() => {
     if (!chapter) return;
     const frame = frameRef.current;
@@ -56,13 +86,30 @@ const PreviewPanel = forwardRef(function PreviewPanel(
       el.addEventListener('mouseout', () => el.classList.remove('pv-hover'));
       el.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); onSelectElement({ selector: buildSelector(el), label: buildLabel(el), x: e.clientX, y: e.clientY }); });
     });
+    
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = 0;
+      setAtBottom(false);
+    }
+    
+    setTimeout(() => {
+      checkScrollPosition();
+    }, 100);
   }, [chapter, rules, viewMode]);
+
+  useEffect(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (scrollArea) {
+      scrollArea.addEventListener('scroll', checkScrollPosition);
+      return () => scrollArea.removeEventListener('scroll', checkScrollPosition);
+    }
+  }, []);
 
   return (
     <div className={styles.panel}>
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>
-          <span className={styles.previewLabel}>Preview —</span>
+          {/* <span className={styles.previewLabel}>Preview —</span> */}
           {chapter && <h2 className={styles.chapterTitle}>{chapter.title}</h2>}
         </div>
         <div className={styles.pillToggle}>
@@ -74,11 +121,15 @@ const PreviewPanel = forwardRef(function PreviewPanel(
 
       {viewMode === 'cleaned' && <p className={styles.hint}>Click any element to select it → action bar appears</p>}
 
-      <div className={styles.scrollArea}>
+      <div className={styles.scrollArea} ref={scrollAreaRef}>
         <div className={styles.articleWrap}>
           <div className={styles.glassArticle} ref={frameRef} id="__preview-frame" />
         </div>
       </div>
+
+      <button className={styles.floatingScrollBtn} onClick={handleScroll}>
+  {atBottom ? <IconArrowUp size={24} stroke={1.5} /> : <IconArrowDown size={24} stroke={1.5} />}
+</button>
 
       <div className={styles.statusBar}>
         {status && <><div className={styles.statusDot} /><span className={styles.statusText}>{status}</span></>}

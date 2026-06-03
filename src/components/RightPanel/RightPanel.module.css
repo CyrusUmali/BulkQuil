@@ -1,6 +1,7 @@
 .panel {
   height: 100%;
-  background: rgba(242,244,246,0.45);
+  /* background: rgba(242,244,246,0.45); */
+  background-color: white;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-left: 1px solid rgba(197,198,203,0.2);

@@ -1,4 +1,4 @@
-import { useState, useRef, useImperativeHandle, forwardRef } from 'react';
+import { useState, useRef ,useEffect, useImperativeHandle, forwardRef } from 'react';
 import TreePane from './TreePane';
 import CssPane from './CssPane';
 import styles from './RightPanel.module.css';
@@ -18,6 +18,10 @@ const RightPanel = forwardRef(function RightPanel(
       treePaneRef.current?.highlightInTree(selector);
     },
   }));
+
+  useEffect(() => {
+    console.log('[RightPanel] chapter prop changed:', chapter?.title, '| ref:', ref, '| treePaneRef:', treePaneRef.current);
+  }, [chapter]);
 
   return (
     <div className={styles.panel}>
