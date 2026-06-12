@@ -16,7 +16,7 @@
 
 .zone:hover {
   border-color: var(--secondary);
-  background: rgba(230,222,255,0.18);
+  /* background: rgba(230,222,255,0.18); */
   transform: scale(1.02);
 }
 

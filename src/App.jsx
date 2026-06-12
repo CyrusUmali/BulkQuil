@@ -55,7 +55,15 @@ export default function App() {
   const desktopRightRef    = useRef(null);
   const previewFrameRef    = { current: typeof document !== 'undefined' ? document.getElementById('__preview-frame') : null };
 
-  useEffect(() => { setCurrentTitle(epub.epubTitle); }, [epub.epubTitle]);
+  
+  useEffect(() => {
+    setCurrentTitle(epub.epubTitle);
+    if (epub.epubTitle) {
+      const { restored } = rulesApi.initForBook(epub.epubTitle);
+      if (restored > 0) epub.setStatus(`Restored ${restored} cached rule(s) for this book.`);
+    }
+  }, [epub.epubTitle]);
+
   useEffect(() => {
     const handler = () => { if (window.innerWidth > 768) closeBothDrawers(); };
     window.addEventListener('resize', handler);
@@ -134,7 +142,18 @@ export default function App() {
   };
 
   const handleLogoClick = () => {
-    if (epub.loaded) { epub.reset(); setChapterRenames({}); setExcludedChapters(new Set()); setCurrentTitle(''); setCoverChanged(false); setCustomCss(''); setActionBar({ visible: false, x: 0, y: 0, origLabel: '', selector: '' }); closeBothDrawers(); epub.setStatus(''); }
+    if (epub.loaded) {
+      epub.reset();
+      rulesApi.resetForBook();          // ← add this
+      setChapterRenames({});
+      setExcludedChapters(new Set());
+      setCurrentTitle('');
+      setCoverChanged(false);
+      setCustomCss('');
+      setActionBar({ visible: false, x: 0, y: 0, origLabel: '', selector: '' });
+      closeBothDrawers();
+      epub.setStatus('');
+    }
   };
 
   useEffect(() => {

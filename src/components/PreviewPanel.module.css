@@ -3,7 +3,7 @@
   flex-direction: column;
   height: 100%;
   background: rgba(247,248,251,0.15);
-  position: relative;
+  position: relative; 
   overflow: hidden;
 }
 
@@ -43,7 +43,7 @@
 
 /* Floating scroll button */
 .floatingScrollBtn {
-  position: fixed;
+  position: absolute;
   bottom: 80px;
   right: 28px;
   width: 44px;

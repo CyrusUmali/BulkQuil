@@ -53,12 +53,28 @@ useEffect(() => {
     }
   }, [selector, previewFrameRef]);
 
-  // Position calculation (doesn't use refs, safe during render)
-  const bw = 340, bh = 140;
+  const bw = 340, bh = 160;
+  const padding = 10;
   let left = x + 14, top = y + 14;
+  
   if (typeof window !== 'undefined') {
-    if (left + bw > window.innerWidth) left = x - bw - 14;
-    if (top + bh > window.innerHeight) top = y - bh - 14;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+  
+    // Try left of tap if it would overflow right
+    if (left + bw > vw - padding) left = x - bw - 14;
+    // If still off-screen on the left, clamp to edge
+    if (left < padding) left = padding;
+  
+    // Try above tap if it would overflow bottom
+    if (top + bh > vh - padding) top = y - bh - 14;
+    // If still off-screen on top, clamp to edge
+    if (top < padding) top = padding;
+  
+    // On narrow screens (mobile), override and center horizontally
+    if (vw < 480) {
+      left = Math.max(padding, (vw - bw) / 2);
+    }
   }
   
   if (!visible) return null;

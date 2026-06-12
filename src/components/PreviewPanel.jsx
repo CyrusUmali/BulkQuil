@@ -45,17 +45,9 @@ const PreviewPanel = forwardRef(function PreviewPanel(
   const handleScroll = () => {
     if (scrollAreaRef.current) {
       if (!atBottom) {
-        // Scroll to bottom
-        scrollAreaRef.current.scrollTo({
-          top: scrollAreaRef.current.scrollHeight,
-          behavior: 'smooth'
-        });
+        scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
       } else {
-        // Scroll to top
-        scrollAreaRef.current.scrollTo({
-          top: 0,
-          behavior: 'smooth'
-        });
+        scrollAreaRef.current.scrollTo({ top: 0, behavior: 'smooth' });
       }
     }
   };
@@ -63,15 +55,27 @@ const PreviewPanel = forwardRef(function PreviewPanel(
   const checkScrollPosition = () => {
     if (scrollAreaRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollAreaRef.current;
-      const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
-      setAtBottom(isAtBottom);
+      setAtBottom(scrollTop + clientHeight >= scrollHeight - 10);
     }
   };
 
+  // Reset scroll only when chapter changes
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = 0;
+      setAtBottom(false);
+    }
+  }, [chapter]);
+
+  // Re-render content when chapter, rules, or viewMode change
   useEffect(() => {
     if (!chapter) return;
     const frame = frameRef.current;
     if (!frame) return;
+
+    // Save scroll position before re-render
+    const savedScroll = scrollAreaRef.current?.scrollTop ?? 0;
+
     const src = viewMode === 'original' ? chapter.originalHtml : applyRulesToHtml(chapter.originalHtml, rules);
     const parser = new DOMParser();
     const doc = parser.parseFromString(src, 'text/html');
@@ -80,21 +84,20 @@ const PreviewPanel = forwardRef(function PreviewPanel(
       rules.forEach(r => { try { doc.body.querySelectorAll(r.selector).forEach(el => el.classList.add('pv-ruled')); } catch(e){} });
     }
     frame.innerHTML = doc.body.innerHTML;
+
+    // Restore scroll position after re-render
+    if (scrollAreaRef.current && savedScroll > 0) {
+      scrollAreaRef.current.scrollTop = savedScroll;
+    }
+
     if (viewMode === 'original') return;
     frame.querySelectorAll('*').forEach(el => {
       el.addEventListener('mouseover', (e) => { e.stopPropagation(); frame.querySelectorAll('.pv-hover').forEach(x => x.classList.remove('pv-hover')); el.classList.add('pv-hover'); });
       el.addEventListener('mouseout', () => el.classList.remove('pv-hover'));
       el.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); onSelectElement({ selector: buildSelector(el), label: buildLabel(el), x: e.clientX, y: e.clientY }); });
     });
-    
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = 0;
-      setAtBottom(false);
-    }
-    
-    setTimeout(() => {
-      checkScrollPosition();
-    }, 100);
+
+    setTimeout(() => checkScrollPosition(), 100);
   }, [chapter, rules, viewMode]);
 
   useEffect(() => {
@@ -109,7 +112,6 @@ const PreviewPanel = forwardRef(function PreviewPanel(
     <div className={styles.panel}>
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>
-          {/* <span className={styles.previewLabel}>Preview —</span> */}
           {chapter && <h2 className={styles.chapterTitle}>{chapter.title}</h2>}
         </div>
         <div className={styles.pillToggle}>
@@ -128,8 +130,8 @@ const PreviewPanel = forwardRef(function PreviewPanel(
       </div>
 
       <button className={styles.floatingScrollBtn} onClick={handleScroll}>
-  {atBottom ? <IconArrowUp size={24} stroke={1.5} /> : <IconArrowDown size={24} stroke={1.5} />}
-</button>
+        {atBottom ? <IconArrowUp size={24} stroke={1.5} /> : <IconArrowDown size={24} stroke={1.5} />}
+      </button>
 
       <div className={styles.statusBar}>
         {status && <><div className={styles.statusDot} /><span className={styles.statusText}>{status}</span></>}
